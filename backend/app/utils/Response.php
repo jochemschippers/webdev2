@@ -1,6 +1,5 @@
 <?php
-// app/utils/Response.php
-
+namespace App\Utils;
 class Response {
 
     /**

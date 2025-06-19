@@ -1,37 +1,64 @@
-version: '3'
+version: '3.8' # Using a slightly newer version for best practices
+
 services:
-    nginx:
-        image: nginx:latest
-        ports:
-            - "80:80"
-        volumes:
-            - ./nginx.conf:/etc/nginx/nginx.conf
-            - ./app:/app
-    php:
-        build:
-            context: .
-            dockerfile: PHP.Dockerfile
-        working_dir: /app
-        volumes:
-            - ./app:/app
-    mysql:
-        image: mariadb:latest
-        environment:
-            MYSQL_ROOT_PASSWORD: 'secret123'
-            MYSQL_USER: 'developer'
-            MYSQL_PASSWORD: 'secret123'
-            MYSQL_DATABASE: 'developmentdb'
-        volumes:
-            - mysqldata:/var/lib/mysql
-            - ./sql:/docker-entrypoint-initdb.d
-        ports:
-            - 3306:3306
-    phpmyadmin:
-        image: phpmyadmin:latest
-        ports:
-            - 8080:80
-        environment:
-            - PMA_HOST=mysql
-        restart: unless-stopped
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80" # Maps host port 80 to container port 80
+    volumes:
+      # CRUCIAL: Mount the host's current directory (your 'backend' folder) to /var/www/html in the container.
+      # This makes your 'public' folder accessible at /var/www/html/public
+      - ./:/var/www/html
+      # Mount your specific nginx.conf file to override the default Nginx config
+      - ./nginx.conf:/etc/nginx/nginx.conf # Make sure your nginx.conf is directly in the backend folder
+    depends_on:
+      - php # Nginx needs PHP-FPM to be running
+    # You might want to add a network if you isolate services, but for now, default bridge is fine.
+    # networks:
+    #   - app-network
+
+  php:
+    build:
+      context: . # Build context is the current directory (your 'backend' folder)
+      dockerfile: PHP.Dockerfile
+    # CRUCIAL: Set the working directory to where the application code is mounted
+    working_dir: /var/www/html
+    volumes:
+      # CRUCIAL: Mount the host's current directory (your 'backend' folder) to /var/www/html in the container.
+      # This ensures PHP-FPM has access to all your backend files (app/, public/, dbconfig.php, etc.)
+      - ./:/var/www/html
+    # networks:
+    #   - app-network
+
+  mysql:
+    image: mariadb:latest # Using mariadb as per your original file
+    environment:
+      MYSQL_ROOT_PASSWORD: 'secret123' # **CHANGE THIS TO A STRONG PASSWORD**
+      MYSQL_USER: 'developer'          # **CHANGE THIS USERNAME**
+      MYSQL_PASSWORD: 'secret123'      # **CHANGE THIS PASSWORD**
+      MYSQL_DATABASE: 'developmentdb'
+    volumes:
+      - mysqldata:/var/lib/mysql # Persistent volume for database data
+      - ./sql:/docker-entrypoint-initdb.d # Mount SQL folder for initial DB import
+    ports:
+      - "3306:3306" # Maps host port 3306 to container port 3306
+    # networks:
+    #   - app-network
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    ports:
+      - "8080:80" # Maps host port 8080 to phpMyAdmin's port 80
+    environment:
+      - PMA_HOST=mysql # Hostname for MySQL service within Docker network
+    restart: unless-stopped
+    # networks:
+    #   - app-network
+
+# Define networks if you decide to uncomment them in services
+# networks:
+#   app-network:
+#     driver: bridge
+
 volumes:
-    mysqldata: {}
+  mysqldata: {} # Define the named volume for MySQL data persistence
