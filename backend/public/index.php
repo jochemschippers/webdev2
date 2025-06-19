@@ -14,12 +14,17 @@ require_once dirname(__FILE__) . '/../app/controllers/GraphicCardController.php'
 require_once dirname(__FILE__) . '/../app/controllers/OrderController.php';
 
 // Use the namespaces for cleaner code
+use App\Controllers\Controller; // Use the base Controller here
 use App\Controllers\UserController;
 use App\Controllers\ManufacturerController;
 use App\Controllers\BrandController;
 use App\Controllers\GraphicCardController;
 use App\Controllers\OrderController;
 use App\Utils\Response; // Use the Response utility class
+
+// Instantiate the base Controller *before* any specific routing logic.
+// This ensures that CORS headers are always set for every request, including OPTIONS preflight.
+$baseController = new Controller(); // This will execute its constructor and set CORS headers.
 
 // Get the request method (GET, POST, PUT, DELETE, OPTIONS)
 $requestMethod = $_SERVER['REQUEST_METHOD'];
@@ -28,9 +33,6 @@ $requestMethod = $_SERVER['REQUEST_METHOD'];
 $requestUri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 
 // Remove the base path /api/ if present
-// For a Docker setup, Nginx typically maps /api/ to your public/ directory.
-// So, if Insomnia sends /api/register, the requestUri will be /api/register.
-// We need to strip '/api' so our routing logic only sees 'register', 'users', etc.
 $basePath = '/api';
 if (strpos($requestUri, $basePath) === 0) {
     $requestUri = substr($requestUri, strlen($basePath));
@@ -150,6 +152,7 @@ switch ($requestUri) {
 
 // If none of the above routes matched and no response was sent, send a 405 error for unsupported method.
 // This handles cases where a correct URI is hit but with an invalid HTTP method.
+// This check is now less critical for CORS preflights, as the base controller ensures headers.
 if (!headers_sent()) {
     Response::error("Method Not Allowed or Invalid Request.", 405); // 405 Method Not Allowed
 }
