@@ -1,10 +1,8 @@
 <?php
-// app/models/User.php
 
-namespace App\Models; // Ensure this namespace is correct
+namespace App\Models; 
 
 class User {
-    // Public properties to hold user data. These MUST be public for direct assignment.
     public $id;
     public $username;
     public $email;

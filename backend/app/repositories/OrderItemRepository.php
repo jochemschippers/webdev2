@@ -1,19 +1,29 @@
 <?php
 // app/repositories/OrderItemRepository.php
 
-namespace App\Repositories; // Use the same namespace as the base Repository
+namespace App\Repositories;
 
-require_once dirname(__FILE__) . '/../models/OrderItem.php'; // Model for data structure
+use \PDO; // Import PDO from the global namespace
+use \PDOException; // Import PDOException from the global namespace
+
+require_once dirname(__FILE__) . '/../models/OrderItem.php';
 require_once dirname(__FILE__) . '/../models/GraphicCard.php'; // For join info
-require_once __DIR__ . '/Repository.php'; // Require the base Repository class
+require_once __DIR__ . '/Repository.php';
 
 class OrderItemRepository extends Repository {
-    // The $this->connection is now inherited from the base Repository
-
+    /**
+     * Constructor for OrderItemRepository.
+     * Calls the parent constructor to establish the database connection.
+     */
     public function __construct() {
-        parent::__construct(); // Call the parent constructor to establish connection
+        parent::__construct();
     }
 
+    /**
+     * Reads all order items for a specific order, with graphic card name.
+     * @param int $order_id
+     * @return array An array of associative arrays of order item data.
+     */
     public function getAllByOrderId($order_id) {
         $query = "SELECT oi.id, oi.order_id, oi.graphic_card_id, oi.quantity, oi.price_at_purchase, gc.name as graphic_card_name
                   FROM order_items oi
@@ -26,6 +36,11 @@ class OrderItemRepository extends Repository {
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Creates a new order item in the database.
+     * @param array $data Order item data (order_id, graphic_card_id, quantity, price_at_purchase).
+     * @return int|false Returns the ID of the newly created order item on success, false on failure.
+     */
     public function create(array $data) {
         $query = "INSERT INTO order_items (order_id, graphic_card_id, quantity, price_at_purchase) VALUES (:order_id, :graphic_card_id, :quantity, :price_at_purchase)";
         $stmt = $this->connection->prepare($query);
