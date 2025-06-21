@@ -8,56 +8,45 @@
     <div v-if="loading" class="text-center py-4">
       <LoadingSpinner />
     </div>
-    <div v-else class="overflow-x-auto">
-      <table class="min-w-full bg-white rounded-lg shadow overflow-hidden">
-        <thead class="bg-gray-200">
-          <tr>
-            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-700">
-              ID
-            </th>
-            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-700">
-              User
-            </th>
-            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-700">
-              Total
-            </th>
-            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-700">
-              Status
-            </th>
-            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-700">
-              Order Date
-            </th>
-            <th
-              v-if="isAdmin"
-              class="py-3 px-4 text-left text-sm font-semibold text-gray-700"
-            >
-              Actions
-            </th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-200">
-          <tr v-if="orders.length === 0 && !loading">
-            <td
-              :colspan="isAdmin ? '6' : '5'"
-              class="py-3 px-4 text-center text-gray-500"
-            >
-              No orders available.
-            </td>
-          </tr>
-          <tr v-for="order in orders" :key="order.id">
-            <td class="py-3 px-4 text-sm text-gray-700">{{ order.id }}</td>
-            <td class="py-3 px-4 text-sm text-gray-700">
-              {{ order.username || "N/A" }} (ID: {{ order.user_id }})
-            </td>
-            <td class="py-3 px-4 text-sm text-gray-700">
-              ${{ parseFloat(order.total_amount).toFixed(2) }}
-            </td>
-            <td class="py-3 px-4 text-sm text-gray-700">
+    <div v-else class="space-y-6">
+      <div v-if="orders.length === 0" class="text-center text-gray-500 py-4">
+        No orders available.
+      </div>
+
+      <div
+        v-for="order in orders"
+        :key="order.id"
+        class="bg-white rounded-lg shadow-md overflow-hidden"
+      >
+        <div
+          class="p-4 border-b border-gray-200 flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer hover:bg-gray-50 transition duration-150 ease-in-out"
+          @click="toggleOrderDetails(order.id)"
+        >
+          <div class="flex-1 mb-2 md:mb-0">
+            <h3 class="text-lg font-semibold text-gray-800">
+              Order #{{ order.id }}
+            </h3>
+            <p class="text-sm text-gray-600">
+              User: {{ order.username || "N/A" }} (ID: {{ order.user_id }})
+            </p>
+            <p class="text-sm text-gray-600">
+              Date:
+              {{ new Date(order.order_date).toLocaleDateString() }}
+            </p>
+          </div>
+          <div
+            class="flex flex-col md:flex-row items-start md:items-center gap-2"
+          >
+            <span class="text-xl font-bold text-blue-600 mr-4">
+              Total: ${{ parseFloat(order.total_amount).toFixed(2) }}
+            </span>
+            <div class="flex items-center gap-2">
               <template v-if="isAdmin">
                 <select
                   v-model="order.status"
                   @change="handleUpdateStatus(order.id, order.status)"
-                  class="form-select text-xs"
+                  class="form-select text-sm p-1 rounded-md border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                  @click.stop
                 >
                   <option
                     v-for="status in [
@@ -73,27 +62,63 @@
                     {{ status.charAt(0).toUpperCase() + status.slice(1) }}
                   </option>
                 </select>
+                <button
+                  @click.stop="handleDeleteOrder(order.id)"
+                  class="bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded-md text-xs transition duration-150 ease-in-out"
+                >
+                  Delete
+                </button>
               </template>
               <template v-else>
-                {{
-                  order.status.charAt(0).toUpperCase() + order.status.slice(1)
-                }}
+                <span class="text-base font-medium text-gray-700"
+                  >Status:
+                  {{
+                    order.status.charAt(0).toUpperCase() + order.status.slice(1)
+                  }}</span
+                >
               </template>
-            </td>
-            <td class="py-3 px-4 text-sm text-gray-700">
-              {{ new Date(order.order_date).toLocaleDateString() }}
-            </td>
-            <td v-if="isAdmin" class="py-3 px-4 text-sm">
-              <button
-                @click="handleDeleteOrder(order.id)"
-                class="bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded-md text-xs transition duration-150 ease-in-out"
+              <svg
+                :class="{ 'rotate-180': expandedOrders[order.id] }"
+                class="w-5 h-5 text-gray-600 transition-transform duration-200 ml-2"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
               >
-                Delete
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M19 9l-7 7-7-7"
+                ></path>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <transition name="fade">
+          <div
+            v-if="expandedOrders[order.id]"
+            class="p-4 bg-gray-50 border-t border-gray-200"
+          >
+            <h4 class="text-md font-semibold mb-3 text-gray-700">
+              Order Items:
+            </h4>
+            <ul class="space-y-2">
+              <li
+                v-for="item in order.items"
+                :key="item.id"
+                class="flex justify-between items-center text-sm text-gray-700 bg-white p-3 rounded-md shadow-sm"
+              >
+                <span>{{ item.graphic_card_name }} x {{ item.quantity }}</span>
+                <span class="font-medium"
+                  >${{ parseFloat(item.price_at_purchase).toFixed(2) }}</span
+                >
+              </li>
+            </ul>
+          </div>
+        </transition>
+      </div>
     </div>
   </div>
 </template>
@@ -113,12 +138,17 @@ const loading = ref(true);
 const message = ref(null);
 const messageType = ref("");
 const isAdmin = ref(props.user && props.user.role === "admin");
+const expandedOrders = ref({}); // To manage expanded/collapsed state of each order
 
 const fetchOrders = async () => {
   loading.value = true;
   try {
     const data = await apiCall("orders", "GET", null, props.authToken);
     orders.value = data;
+    // Initialize all orders as collapsed
+    data.forEach((order) => {
+      expandedOrders.value[order.id] = false;
+    });
     messageType.value = "success";
     message.value = "Orders loaded.";
   } catch (error) {
@@ -138,6 +168,10 @@ watch(
   }
 );
 watch(() => props.authToken, fetchOrders);
+
+const toggleOrderDetails = (orderId) => {
+  expandedOrders.value[orderId] = !expandedOrders.value[orderId];
+};
 
 const handleUpdateStatus = async (orderId, newStatus) => {
   if (!isAdmin.value) {
@@ -195,4 +229,13 @@ const handleDeleteOrder = async (orderId) => {
 
 <style scoped>
 /* Scoped styles specific to this component */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.5s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
 </style>

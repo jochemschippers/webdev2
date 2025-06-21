@@ -1,90 +1,110 @@
 <template>
-  <div class="bg-white p-6 rounded-lg shadow-md mb-6">
-    <h3 class="text-xl font-bold mb-4 text-gray-800">Your Cart</h3>
-    <Message :type="messageType" :message="message" />
-    <template v-if="cart.length === 0">
-      <p class="text-gray-600">Your cart is empty.</p>
-    </template>
-    <template v-else>
-      <ul class="mb-4 divide-y divide-gray-200">
-        <li
-          v-for="item in cart"
-          :key="item.id"
-          class="py-2 flex justify-between items-center"
-        >
-          <span class="text-gray-700"
-            >{{ item.name }} x {{ item.quantity }}</span
-          >
-          <div class="flex items-center">
-            <span class="font-semibold text-gray-800 mr-4"
-              >${{ (parseFloat(item.price) * item.quantity).toFixed(2) }}</span
-            >
-            <button
-              @click="emit('remove-from-cart', item.id)"
-              class="bg-red-500 hover:bg-red-600 text-white text-xs py-1 px-2 rounded-md transition duration-150 ease-in-out"
-            >
-              Remove
-            </button>
-          </div>
-        </li>
-      </ul>
-      <div class="text-right text-lg font-bold text-gray-800 mb-4">
-        Total: ${{ total.toFixed(2) }}
-      </div>
-      <button
-        @click="handleOrder"
-        class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md shadow-sm transition duration-150 ease-in-out"
-        :disabled="loading || !user"
+  <div class="bg-white rounded-lg shadow-md p-6 sticky top-4">
+    <h3 class="text-2xl font-bold mb-4 text-gray-800 text-center">
+      Your Cart
+      <span v-if="cart.length > 0" class="text-blue-600"
+        >({{ cart.length }})</span
       >
-        {{
-          loading
-            ? "Placing Order..."
-            : user
-            ? "Place Order"
-            : "Login to Place Order"
-        }}
+    </h3>
+
+    <Message :type="messageType" :message="message" />
+
+    <div v-if="cart.length === 0" class="text-center text-gray-500 py-4">
+      Your cart is empty.
+    </div>
+
+    <div v-else class="space-y-4">
+      <div
+        v-for="item in cart"
+        :key="item.id"
+        class="flex items-center justify-between border-b pb-2"
+      >
+        <div class="flex-1">
+          <p class="font-semibold text-gray-700">{{ item.name }}</p>
+          <p class="text-sm text-gray-500">
+            \${{ parseFloat(item.price).toFixed(2) }} x {{ item.quantity }}
+          </p>
+        </div>
+        <button
+          @click="emit('remove-from-cart', item.id)"
+          class="bg-red-500 hover:bg-red-600 text-white p-1 rounded-full text-xs"
+          aria-label="Remove item"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-4 w-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
+        </button>
+      </div>
+
+      <div class="pt-4 border-t-2 border-gray-200">
+        <div class="flex justify-between font-bold text-lg text-gray-800">
+          <span>Total:</span>
+          <span>\${{ cartTotal.toFixed(2) }}</span>
+        </div>
+      </div>
+
+      <button
+        @click="placeOrder"
+        :disabled="cart.length === 0 || loading || !user"
+        class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md shadow-md transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        <span v-if="loading">Placing Order...</span>
+        <span v-else>{{ user ? "Place Order" : "Login to Place Order" }}</span>
       </button>
-    </template>
+
+      <p v-if="!user" class="text-center text-sm text-red-500 mt-2">
+        Please log in to place an order.
+      </p>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, watch, defineProps, defineEmits } from "vue";
+import { computed, ref, defineProps, defineEmits } from "vue";
 import { apiCall } from "@/utils/api";
 import { Message } from "@/utils/components";
+import { useRouter } from "vue-router";
 
 const props = defineProps({
   cart: {
     type: Array,
     required: true,
   },
-  user: Object, // Can be null
+  user: Object,
   authToken: String,
 });
 
-const emit = defineEmits(["remove-from-cart", "place-order"]);
+// Removed 'place-order' emit from here, as cart clearing will be handled by PaymentPage's 'order-completed'
+const emit = defineEmits(["remove-from-cart"]);
+
+const router = useRouter();
 
 const loading = ref(false);
 const message = ref(null);
 const messageType = ref("");
 
-const total = ref(0);
+const cartTotal = computed(() => {
+  return props.cart.reduce(
+    (total, item) => total + item.price * item.quantity,
+    0
+  );
+});
 
-watch(
-  () => props.cart,
-  (newCart) => {
-    total.value = newCart.reduce(
-      (sum, item) => sum + parseFloat(item.price) * item.quantity,
-      0
-    );
-  },
-  { immediate: true }
-);
-
-const handleOrder = async () => {
+const placeOrder = async () => {
   if (!props.user) {
     messageType.value = "error";
-    message.value = "Please log in to place an order.";
+    message.value = "You must be logged in to place an order.";
     return;
   }
   if (props.cart.length === 0) {
@@ -95,25 +115,53 @@ const handleOrder = async () => {
 
   loading.value = true;
   message.value = null;
+
   try {
     const orderItems = props.cart.map((item) => ({
       graphic_card_id: item.id,
       quantity: item.quantity,
-      price_at_purchase: parseFloat(item.price),
+      price_at_purchase: item.price,
     }));
 
-    await apiCall(
+    console.log("Attempting to place order with payload:", {
+      user_id: props.user.id,
+      total_amount: cartTotal.value,
+      status: "pending",
+      items: orderItems,
+    });
+
+    const response = await apiCall(
       "orders",
       "POST",
-      { user_id: props.user.id, items: orderItems },
+      {
+        user_id: props.user.id,
+        total_amount: cartTotal.value,
+        status: "pending", // Default status
+        items: orderItems,
+      },
       props.authToken
     );
-    messageType.value = "success";
-    message.value = "Order placed successfully!";
-    emit("place-order");
+
+    console.log("Order placement API response:", response); // Log the full response
+
+    // After successful order creation, redirect to the payment page with the new order ID
+    if (response.order && response.order.id) {
+      messageType.value = "success";
+      message.value = "Order placed successfully! Redirecting to payment...";
+      // No emit('place-order') here, cart will be cleared when PaymentPage emits 'order-completed'
+      router.push({ name: "checkout", params: { orderId: response.order.id } });
+    } else {
+      // This 'else' block will catch cases where the API call was 'ok' (2xx status)
+      // but the expected 'order' object or 'order.id' is missing in the response body.
+      messageType.value = "error";
+      message.value =
+        "Order placed, but failed to get order ID for payment. Check server logs.";
+      console.error("API response missing order ID:", response);
+    }
   } catch (error) {
     messageType.value = "error";
     message.value = error.message || "Failed to place order.";
+    console.error("Error during order placement:", error);
   } finally {
     loading.value = false;
   }

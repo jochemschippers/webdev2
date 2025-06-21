@@ -10,6 +10,7 @@ class Order {
     public $order_date;
     public $updated_at;
     public $username; // From join with users table
+    public $items;
 
     public function __construct(array $data = []) {
         $this->fill($data);

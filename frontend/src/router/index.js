@@ -7,6 +7,8 @@ import AdminPanel from "@/components/AdminPanel.vue";
 import ManufacturerManager from "@/components/ManufacturerManager.vue";
 import BrandManager from "@/components/BrandManager.vue";
 import OrderManager from "@/components/OrderManager.vue";
+import CartPage from "@/components/CartPage.vue";
+import PaymentPage from "@/components/PaymentPage.vue";
 
 const routes = [
   {
@@ -32,6 +34,28 @@ const routes = [
     path: "/register",
     name: "register",
     component: RegisterPage,
+  },
+  {
+    path: "/cart", // New route for the dedicated cart page
+    name: "cart",
+    component: CartPage,
+    meta: { requiresAuth: true }, // Cart usually requires a logged-in user
+    props: (route) => ({
+      user: route.meta.user,
+      authToken: route.meta.authToken,
+      cart: route.meta.cart,
+    }),
+  },
+  {
+    path: "/checkout/:orderId", // New route for the payment page with a dynamic orderId
+    name: "checkout",
+    component: PaymentPage,
+    meta: { requiresAuth: true }, // Payment page definitely requires auth
+    props: (route) => ({
+      orderId: route.params.orderId, // Pass orderId from URL to component
+      user: route.meta.user,
+      authToken: route.meta.authToken,
+    }),
   },
   {
     path: "/admin",

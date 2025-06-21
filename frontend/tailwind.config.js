@@ -10,7 +10,7 @@ module.exports = {
     extend: {
       // You can extend Tailwind's default theme here, e.g., custom colors, fonts
       fontFamily: {
-        inter: ['Inter', 'sans-serif'], // Define 'inter' font family
+        inter: ["Inter", "sans-serif"], // Define 'inter' font family
       },
     },
   },

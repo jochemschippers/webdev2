@@ -43,16 +43,30 @@
         <input
           type="password"
           id="reg-password"
-          class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline focus:border-blue-500"
+          class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-1 leading-tight focus:outline-none focus:shadow-outline focus:border-blue-500"
+          :class="{ 'border-red-500': passwordErrors.length > 0 }"
           v-model="password"
+          @input="validatePassword"
           required
         />
+        <ul
+          v-if="passwordErrors.length > 0"
+          class="text-red-500 text-xs mt-1 list-disc list-inside"
+        >
+          <li v-for="(error, index) in passwordErrors" :key="index">
+            {{ error }}
+          </li>
+        </ul>
+        <p class="text-gray-600 text-xs mt-1">
+          Password must be at least 8 characters long, include an uppercase
+          letter, a lowercase letter, a number, and a special character.
+        </p>
       </div>
       <div class="flex items-center justify-between">
         <button
           type="submit"
           class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out"
-          :disabled="loading"
+          :disabled="loading || passwordErrors.length > 0"
         >
           {{ loading ? "Registering..." : "Register" }}
         </button>
@@ -69,9 +83,9 @@
 </template>
 
 <script setup>
-import { ref, defineEmits } from "vue";
-import { apiCall } from "@/utils/api"; // Import apiCall utility
-import { Message } from "@/utils/components"; // Import Message component
+import { ref, defineEmits, watch } from "vue";
+import { apiCall } from "@/utils/api";
+import { Message } from "@/utils/components";
 
 const username = ref("");
 const email = ref("");
@@ -79,11 +93,53 @@ const password = ref("");
 const loading = ref(false);
 const message = ref(null);
 const messageType = ref("");
+const passwordErrors = ref([]); // Array to hold specific password validation errors
 
 const emit = defineEmits(["register-success", "navigate"]);
 
+// Client-side password validation
+const validatePassword = () => {
+  passwordErrors.value = [];
+
+  if (password.value.length < 8) {
+    passwordErrors.value.push("Password must be at least 8 characters long.");
+  }
+  if (!/[A-Z]/.test(password.value)) {
+    passwordErrors.value.push(
+      "Password must contain at least one uppercase letter."
+    );
+  }
+  if (!/[a-z]/.test(password.value)) {
+    passwordErrors.value.push(
+      "Password must contain at least one lowercase letter."
+    );
+  }
+  if (!/[0-9]/.test(password.value)) {
+    passwordErrors.value.push("Password must contain at least one number.");
+  }
+  if (!/[^A-Za-z0-9]/.test(password.value)) {
+    passwordErrors.value.push(
+      "Password must contain at least one special character."
+    );
+  }
+};
+
+// Watch password changes to trigger validation
+watch(password, () => {
+  validatePassword();
+});
+
 const handleSubmit = async (e) => {
   e.preventDefault();
+
+  // Perform client-side validation immediately before sending to backend
+  validatePassword();
+  if (passwordErrors.value.length > 0) {
+    messageType.value = "error";
+    message.value = "Please correct the password errors.";
+    return; // Stop submission if client-side validation fails
+  }
+
   loading.value = true;
   message.value = null;
   try {
@@ -92,14 +148,14 @@ const handleSubmit = async (e) => {
       email: email.value,
       password: password.value,
     });
-    // For registration, we typically just indicate success and then prompt login
-    // If the backend directly logs in after register, adjust login-success emit
+
     emit("register-success", data.user, data.token); // Assuming backend returns user/token
     messageType.value = "success";
     message.value = "Registration successful! You can now log in.";
     username.value = "";
     email.value = "";
     password.value = "";
+    passwordErrors.value = []; // Clear errors on success
   } catch (error) {
     messageType.value = "error";
     message.value = error.message || "Registration failed.";

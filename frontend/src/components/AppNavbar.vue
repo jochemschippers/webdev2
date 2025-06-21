@@ -25,6 +25,16 @@
           }"
           >Products</router-link
         >
+        <router-link
+          :to="{ name: 'cart' }"
+          class="px-3 py-2 rounded-md text-sm font-medium transition duration-150 ease-in-out"
+          :class="{
+            'bg-gray-900 text-white': $route.name === 'cart',
+            'text-gray-300 hover:bg-gray-700 hover:text-white':
+              $route.name !== 'cart',
+          }"
+          >Cart</router-link
+        >
         <template v-if="user">
           <router-link
             v-if="user.role === 'admin'"

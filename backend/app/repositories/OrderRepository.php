@@ -132,29 +132,57 @@ class OrderRepository extends Repository {
      * Updates an existing order directly in the database.
      *
      * @param int $id The ID of the order to update.
-     * @param array $data Associative array of order data to update (user_id, total_amount, status).
+     * @param array $data Associative array of order data to update (e.g., 'status').
      * @return bool True on success, false on failure.
      */
     public function update($id, array $data) {
-        $query = "UPDATE orders SET user_id = :user_id, total_amount = :total_amount, status = :status WHERE id = :id";
+        $setClauses = [];
+        $bindParams = [':id' => $id];
+
+        // Dynamically build the SET clause and bind parameters
+        if (isset($data['user_id'])) {
+            $setClauses[] = 'user_id = :user_id';
+            $bindParams[':user_id'] = $data['user_id'];
+        }
+        if (isset($data['total_amount'])) {
+            $setClauses[] = 'total_amount = :total_amount';
+            $bindParams[':total_amount'] = $data['total_amount'];
+        }
+        if (isset($data['status'])) {
+            $setClauses[] = 'status = :status';
+            $bindParams[':status'] = htmlspecialchars(strip_tags($data['status']));
+        }
+
+        // If no fields are provided to update, return false
+        if (empty($setClauses)) {
+            return false;
+        }
+
+        $query = "UPDATE orders SET " . implode(', ', $setClauses) . " WHERE id = :id";
         $stmt = $this->connection->prepare($query);
 
-        // Sanitize data
-        $user_id = $data['user_id'];
-        $total_amount = $data['total_amount'];
-        $status = htmlspecialchars(strip_tags($data['status']));
+        foreach ($bindParams as $key => $value) {
+            // Determine parameter type (simplified: assuming string for most, int for ID)
+            // For production, you'd use more explicit type mapping based on column type
+            if ($key === ':id' || $key === ':user_id') {
+                $stmt->bindValue($key, $value, PDO::PARAM_INT);
+            } else if ($key === ':total_amount') {
+                $stmt->bindValue($key, $value, PDO::PARAM_STR); // DECIMAL type in DB can be bound as string
+            } else {
+                $stmt->bindValue($key, $value, PDO::PARAM_STR);
+            }
+        }
 
-        // Bind values
-        $stmt->bindParam(":user_id", $user_id, PDO::PARAM_INT);
-        $stmt->bindParam(":total_amount", $total_amount);
-        $stmt->bindParam(":status", $status);
-        $stmt->bindParam(":id", $id, PDO::PARAM_INT);
-
-        if ($stmt->execute()) {
-            return true;
+        try {
+            if ($stmt->execute()) {
+                return true;
+            }
+        } catch (PDOException $e) {
+            error_log("OrderRepository: Update failed for order ID " . $id . ": " . $e->getMessage());
         }
         return false;
     }
+
 
     /**
      * Deletes an order directly from the database.

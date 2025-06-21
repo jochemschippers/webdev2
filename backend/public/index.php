@@ -12,6 +12,8 @@ require_once dirname(__FILE__) . '/../app/controllers/ManufacturerController.php
 require_once dirname(__FILE__) . '/../app/controllers/BrandController.php';
 require_once dirname(__FILE__) . '/../app/controllers/GraphicCardController.php';
 require_once dirname(__FILE__) . '/../app/controllers/OrderController.php';
+require_once dirname(__FILE__) . '/../vendor/autoload.php';
+
 
 // Use the namespaces for cleaner code
 use App\Controllers\Controller; // Use the base Controller here
