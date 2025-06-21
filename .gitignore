@@ -1,0 +1,26 @@
+# Node.js and React Frontend
+/frontend/node_modules
+/frontend/dist/ # For Vite or other bundlers' build output
+/frontend/.env.local # Local environment variables
+/frontend/.vite/ # Vite cache directory
+
+# PHP Backend
+/backend/vendor/ # Composer dependencies
+/backend/.env # If you use .env files for local development (though you're using docker-compose environment vars)
+/backend/var/ # Common directory for cache, logs, sessions etc. (if not explicitly mounted as volume)
+/backend/logs/ # Explicit logs directory if used
+/backend/dbconfig.php # If this file contains sensitive credentials not managed by Docker Compose (though in your setup, it should be fine as it's templated)
+
+# Docker related
+/.dockerignore # It's good practice to ignore this if it lives at the root
+*.sql # Often, init SQL files are tracked, but if dynamically generated or contain sensitive data, ignore.
+*.db # SQLite database files, if any
+docker-compose.override.yml # If you use an override file for local development specifics
+
+# IDE and OS specific files
+.idea/ # PhpStorm, IntelliJ, WebStorm
+.vscode/ # VS Code
+.DS_Store # macOS
+Thumbs.db # Windows
+npm-debug.log
+yarn-debug.log
