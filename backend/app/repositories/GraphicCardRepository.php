@@ -171,5 +171,33 @@ class GraphicCardRepository extends Repository {
         }
         return false;
     }
+
+    /**
+     * Decrements the stock of a graphic card by a given quantity.
+     * Ensures stock does not go below zero.
+     * @param int $graphicCardId The ID of the graphic card.
+     * @param int $quantity The amount to decrement.
+     * @return bool True on success, false if stock is insufficient or update fails.
+     */
+    public function decrementStock(int $graphicCardId, int $quantity): bool {
+        try {
+            // Use a transaction for atomicity, though a single UPDATE with WHERE condition is also good.
+            // For simplicity and directness, we'll do a single update statement that checks stock.
+            $query = "UPDATE graphic_cards SET stock = stock - ? WHERE id = ? AND stock >= ?";
+            $stmt = $this->connection->prepare($query);
+            $stmt->bindParam(1, $quantity, PDO::PARAM_INT);
+            $stmt->bindParam(2, $graphicCardId, PDO::PARAM_INT);
+            $stmt->bindParam(3, $quantity, PDO::PARAM_INT); // Ensure stock is sufficient
+
+            $stmt->execute();
+
+            // Check if any row was affected. If 0 rows affected, it means:
+            // 1. The graphic card ID didn't exist.
+            // 2. The stock was already insufficient.
+            return $stmt->rowCount() > 0;
+        } catch (PDOException $e) {
+            error_log("GraphicCardRepository: Failed to decrement stock for ID {$graphicCardId}. Error: " . $e->getMessage());
+            return false;
+        }
+    }
 }
-?>

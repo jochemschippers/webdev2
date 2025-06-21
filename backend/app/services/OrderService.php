@@ -81,7 +81,9 @@ class OrderService {
 
         $totalAmount = 0;
         $orderItemsDataForCreation = [];
+        $graphicCardStockUpdates = []; // NEW: Store stock updates to apply after order creation
 
+        // First pass: Validate stock and calculate total, prepare items and stock updates
         foreach ($items as $item) {
             if (empty($item['graphic_card_id']) || empty($item['quantity']) || !is_numeric($item['quantity']) || $item['quantity'] <= 0) {
                 error_log("OrderService: Invalid item data received for graphic_card_id or quantity.");
@@ -107,8 +109,12 @@ class OrderService {
                 'price_at_purchase' => $itemPrice,
                 'graphic_card_name' => $graphicCard['name'] // Include name for email/PDF consistency
             ];
-            // In a real application, you would also decrement the stock here using the GraphicCardRepository
-            // e.g., $this->graphicCardRepository->decrementStock($item['graphic_card_id'], $item['quantity']);
+
+            // NEW: Prepare stock decrement for this graphic card
+            $graphicCardStockUpdates[] = [
+                'id' => (int)$item['graphic_card_id'],
+                'quantity' => (int)$item['quantity']
+            ];
         }
 
         $orderData = [
@@ -118,39 +124,63 @@ class OrderService {
             'items' => $orderItemsDataForCreation
         ];
 
-        $newOrderId = $this->orderRepository->create($orderData);
+        // Begin transaction to ensure atomicity of order creation and stock update
+        try {
+            $this->orderRepository->beginTransaction(); // Assumes Repository has beginTransaction method
 
-        if ($newOrderId) {
-            $createdOrderData = $this->orderRepository->getById($newOrderId);
-            
-            $user = $this->userRepository->getUserById($userId);
-            if ($user && isset($user['email'])) {
-                $recipientEmail = $user['email'];
-                $subject = "Your GPU Shop Order Confirmation - Order #" . $newOrderId;
-                $messageBody = "
-                    <p>Dear {$user['username']},</p>
-                    <p>Thank you for your order! Your order #<strong>{$newOrderId}</strong> has been successfully placed.</p>
-                    <p><strong>Order Summary:</strong></p>
-                    <ul>";
-                foreach ($createdOrderData['items'] as $item) {
-                    $messageBody .= "<li>{$item['graphic_card_name']} (x{$item['quantity']}) - \${$item['price_at_purchase']} each</li>";
+            $newOrderId = $this->orderRepository->create($orderData);
+
+            if ($newOrderId) {
+                // NEW: Decrement stock for each item after successful order creation
+                foreach ($graphicCardStockUpdates as $update) {
+                    $stockDecremented = $this->graphicCardRepository->decrementStock($update['id'], $update['quantity']);
+                    if (!$stockDecremented) {
+                        // If stock decrement fails for any reason, rollback the entire order
+                        error_log("OrderService: Failed to decrement stock for graphic card ID {$update['id']} during order creation.");
+                        $this->orderRepository->rollBack();
+                        return false;
+                    }
                 }
-                $messageBody .= "
-                    </ul>
-                    <p><strong>Total Amount:</strong> \${$createdOrderData['total_amount']}</p>
-                    <p><strong>Current Status:</strong> " . ucfirst($createdOrderData['status']) . "</p>
-                    <p>We will notify you once your order has been processed and shipped.</p>
-                    <p>Best regards,</p>
-                    <p>The GPU Shop Team</p>
-                ";
-                Mailer::sendEmail($recipientEmail, $subject, $messageBody);
-            } else {
-                error_log("OrderService: Could not send order confirmation email. User email not found for ID: {$userId}");
-            }
 
-            return $createdOrderData;
+                $this->orderRepository->commitTransaction(); // Assumes Repository has commitTransaction method
+
+                $createdOrderData = $this->orderRepository->getById($newOrderId);
+                
+                $user = $this->userRepository->getUserById($userId);
+                if ($user && isset($user['email'])) {
+                    $recipientEmail = $user['email'];
+                    $subject = "Your GPU Shop Order Confirmation - Order #" . $newOrderId;
+                    $messageBody = "
+                        <p>Dear {$user['username']},</p>
+                        <p>Thank you for your order! Your order #<strong>{$newOrderId}</strong> has been successfully placed.</p>
+                        <p><strong>Order Summary:</strong></p>
+                        <ul>";
+                    foreach ($createdOrderData['items'] as $item) {
+                        $messageBody .= "<li>{$item['graphic_card_name']} (x{$item['quantity']}) - \${$item['price_at_purchase']} each</li>";
+                    }
+                    $messageBody .= "
+                        </ul>
+                        <p><strong>Total Amount:</strong> \${$createdOrderData['total_amount']}</p>
+                        <p><strong>Current Status:</strong> " . ucfirst($createdOrderData['status']) . "</p>
+                        <p>We will notify you once your order has been processed and shipped.</p>
+                        <p>Best regards,</p>
+                        <p>The GPU Shop Team</p>
+                    ";
+                    Mailer::sendEmail($recipientEmail, $subject, $messageBody);
+                } else {
+                    error_log("OrderService: Could not send order confirmation email. User email not found for ID: {$userId}");
+                }
+
+                return $createdOrderData;
+            } else {
+                $this->orderRepository->rollBack(); // Rollback if order creation failed
+                return false;
+            }
+        } catch (\Exception $e) {
+            $this->orderRepository->rollBack(); // Catch any other exceptions and rollback
+            error_log("OrderService: Transaction failed during order creation: " . $e->getMessage());
+            return false;
         }
-        return false;
     }
 
     /**
@@ -168,7 +198,6 @@ class OrderService {
         }
 
         $updateFields = [];
-        // Only allow specific fields to be updated for security and logic control
         if (isset($data['user_id'])) {
              $updateFields['user_id'] = $data['user_id'];
         }
@@ -199,18 +228,16 @@ class OrderService {
                 $user = $this->userRepository->getUserById($updatedOrderData['user_id']);
                 if ($user && isset($user['email'])) {
                     $invoiceHtml = $this->generateInvoiceHtml($updatedOrderData, $user);
-                    $filename = "invoice_order_" . $updatedOrderData['id'] . "_" . date('Ymd_His') . ".pdf"; // Add timestamp for uniqueness
+                    $filename = "invoice_order_" . $updatedOrderData['id'] . "_" . date('Ymd_His') . ".pdf";
                     $pdfOutput = PdfGenerator::generatePdf($invoiceHtml, $filename);
 
                     if ($pdfOutput) {
                         error_log("OrderService: Generated PDF invoice for order #{$updatedOrderData['id']}. Attaching to email.");
-                        // NEW: Prepare attachment array
                         $attachments = [[
                             'content' => $pdfOutput,
                             'name' => $filename,
                             'type' => 'application/pdf'
                         ]];
-                        // NEW: Send email with PDF attachment
                         $recipientEmail = $user['email'];
                         $subject = "Your GPU Shop Invoice - Order #" . $updatedOrderData['id'];
                         $messageBody = "
@@ -249,7 +276,6 @@ class OrderService {
     private function generateInvoiceHtml(array $orderData, array $userData): string {
         $itemsHtml = '';
         foreach ($orderData['items'] as $item) {
-            // Ensure graphic_card_name exists for display
             $itemName = htmlspecialchars($item['graphic_card_name'] ?? 'N/A');
             $itemQuantity = htmlspecialchars($item['quantity']);
             $itemPrice = number_format($item['price_at_purchase'], 2);
@@ -268,16 +294,7 @@ class OrderService {
         $orderDate = date('Y-m-d', strtotime($orderData['order_date']));
         $totalAmountFormatted = number_format($orderData['total_amount'], 2);
 
-        // Basic user address/shipping details (replace with actual fields if available in your user/order tables)
         $userAddress = "N/A<br>N/A, N/A"; // Placeholder if not in user/order data
-        // Example if you had shipping_address_line1, city, etc. in orderData or userData
-        // if (isset($orderData['shipping_address_line1'])) {
-        //     $userAddress = htmlspecialchars($orderData['shipping_address_line1']) . "<br>";
-        //     $userAddress .= htmlspecialchars($orderData['shipping_city']) . ", ";
-        //     $userAddress .= htmlspecialchars($orderData['shipping_state']) . " ";
-        //     $userAddress .= htmlspecialchars($orderData['shipping_zip_code']);
-        // }
-
 
         return "
             <!DOCTYPE html>
