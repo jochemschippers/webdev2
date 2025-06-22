@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80" # Maps host port 80 to container port 80
+    volumes:
+      - ./:/var/www/html
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - php
+    environment:
+      - JWT_SECRET=200b08e8de405d8be25dbaa9ce31c17ade7896e4c92697308fdeaffbcf51d49e
+
+  php:
+    build:
+      context: .
+      dockerfile: PHP.Dockerfile
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+    environment: # NEW: Environment variables for SMTP configuration
+      # !!! REPLACE THESE WITH YOUR ACTUAL SMTP PROVIDER'S CREDENTIALS !!!
+      SMTP_HOST: 'smtp.gmail.com'
+      SMTP_PORT: '587' # Use 587 for TLS
+      SMTP_USERNAME: 'gpushopinholland@gmail.com' # Your full Gmail or Google Workspace email address
+      SMTP_PASSWORD: 'ayau svog wzho pfru' # Your App Password if 2FA is on, else your regular password
+      SENDER_EMAIL: 'gpushopinholland@gmail.com' # Must match SMTP_USERNAME email for Gmail
+      SENDER_NAME: 'GPU Shop' # The name that will appear as the sender
+    depends_on:
+      - mysql # PHP needs MySQL to be running
+
+  mysql:
+    image: mariadb:latest
+    environment:
+      MYSQL_ROOT_PASSWORD: 'secret123' 
+      MYSQL_USER: 'developer'         
+      MYSQL_PASSWORD: 'secret123'     
+      MYSQL_DATABASE: 'developmentdb'
+    volumes:
+      - mysqldata:/var/lib/mysql
+      - ./sql:/docker-entrypoint-initdb.d
+    ports:
+      - "3306:3306"
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    ports:
+      - "8080:80"
+    environment:
+      - PMA_HOST=mysql
+    restart: unless-stopped
+
+volumes:
+  mysqldata: {}
