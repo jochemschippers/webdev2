@@ -9,6 +9,7 @@ import BrandManager from "@/components/BrandManager.vue";
 import OrderManager from "@/components/OrderManager.vue";
 import CartPage from "@/components/CartPage.vue";
 import PaymentPage from "@/components/PaymentPage.vue";
+import GraphicCardDetailPage from "@/components/GraphicCardDetailPage.vue"; // NEW: Import GraphicCardDetailPage
 
 const routes = [
   {
@@ -21,8 +22,38 @@ const routes = [
     name: "products",
     component: ProductListPage,
     props: (route) => ({
-      user: route.meta.user, // Will pass user from auth meta if available
-      authToken: route.meta.authToken, // Will pass token from auth meta if available
+      user: route.meta.user,
+      authToken: route.meta.authToken,
+      cart: route.meta.cart,
+    }),
+  },
+  {
+    // NEW ROUTE: Graphic Card Detail Page
+    path: "/graphic-cards/:id",
+    name: "graphic-card-detail",
+    component: GraphicCardDetailPage,
+    props: true, // This tells Vue Router to pass route.params.id as a prop to the component
+  },
+  {
+    path: "/cart",
+    name: "cart",
+    component: CartPage,
+    meta: { requiresAuth: true },
+    props: (route) => ({
+      user: route.meta.user,
+      authToken: route.meta.authToken,
+      cart: route.meta.cart,
+    }),
+  },
+  {
+    path: "/checkout/:orderId",
+    name: "checkout",
+    component: PaymentPage,
+    meta: { requiresAuth: true },
+    props: (route) => ({
+      orderId: route.params.orderId,
+      user: route.meta.user,
+      authToken: route.meta.authToken,
     }),
   },
   {
@@ -34,28 +65,6 @@ const routes = [
     path: "/register",
     name: "register",
     component: RegisterPage,
-  },
-  {
-    path: "/cart", // New route for the dedicated cart page
-    name: "cart",
-    component: CartPage,
-    meta: { requiresAuth: true }, // Cart usually requires a logged-in user
-    props: (route) => ({
-      user: route.meta.user,
-      authToken: route.meta.authToken,
-      cart: route.meta.cart,
-    }),
-  },
-  {
-    path: "/checkout/:orderId", // New route for the payment page with a dynamic orderId
-    name: "checkout",
-    component: PaymentPage,
-    meta: { requiresAuth: true }, // Payment page definitely requires auth
-    props: (route) => ({
-      orderId: route.params.orderId, // Pass orderId from URL to component
-      user: route.meta.user,
-      authToken: route.meta.authToken,
-    }),
   },
   {
     path: "/admin",
@@ -84,14 +93,14 @@ const routes = [
   {
     path: "/admin/orders",
     name: "admin-orders",
-    component: OrderManager, // Re-use OrderManager for admin view
+    component: OrderManager,
     meta: { requiresAuth: true, requiresAdmin: true },
   },
   // Catch-all for 404
   {
     path: "/:catchAll(.*)",
     name: "NotFound",
-    redirect: "/", // Redirect to home for now, or display a 404 component
+    redirect: "/",
   },
 ];
 
@@ -100,23 +109,19 @@ const router = createRouter({
   routes,
 });
 
-// Basic Navigation Guard (Middleware) for authentication and authorization
 router.beforeEach((to, from, next) => {
   const user = JSON.parse(localStorage.getItem("user"));
   const authToken = localStorage.getItem("authToken");
 
-  // Attach user and authToken to route meta for components to access
   to.meta.user = user;
   to.meta.authToken = authToken;
 
   if (to.meta.requiresAuth && !user) {
-    // If route requires auth and user is not logged in, redirect to login
     next({ name: "login" });
   } else if (to.meta.requiresAdmin && (!user || user.role !== "admin")) {
-    // If route requires admin and user is not admin, redirect to home or show access denied
-    next({ name: "home" }); // Or a dedicated access-denied page
+    next({ name: "home" });
   } else {
-    next(); // Proceed to route
+    next();
   }
 });
 

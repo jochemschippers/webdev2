@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y \
     && docker-php-ext-install pdo pdo_mysql zip gd mbstring exif pcntl bcmath \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install gd \
-    && docker-php-ext-install xml intl # Install XML and Intl extensions for Dompdf 
+    && docker-php-ext-install xml intl # Install XML and Intl extensions for Dompdf
 
 # Install Composer globally
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
@@ -35,3 +35,7 @@ RUN echo "display_errors = Off" >> /usr/local/etc/php/conf.d/docker-php-ext-xdeb
     echo "error_log = /dev/stderr" >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
 
 WORKDIR /var/www/html # Set working directory inside the container for your application files
+
+EXPOSE 9000
+
+CMD ["php-fpm"]

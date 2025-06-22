@@ -10,6 +10,8 @@ services:
       - ./nginx.conf:/etc/nginx/nginx.conf
     depends_on:
       - php
+    environment:
+      - JWT_SECRET=200b08e8de405d8be25dbaa9ce31c17ade7896e4c92697308fdeaffbcf51d49e
 
   php:
     build:

@@ -1,10 +1,8 @@
 <template>
   <div id="app" class="min-h-screen bg-gray-100 font-inter">
-    <!-- AppNavbar will now use router-link internally and not need currentPage -->
     <AppNavbar :user="user" @logout="handleLogout" />
 
     <main class="p-4">
-      <!-- Vue Router will render the matched component here -->
       <router-view
         :user="user"
         :auth-token="authToken"
@@ -12,34 +10,59 @@
         @register-success="handleLoginSuccess"
         @add-to-cart="handleAddToCart"
         @remove-from-cart="handleRemoveFromCart"
-        @place-order="handlePlaceOrderSuccess"
+        @update-cart-quantity="handleUpdateCartQuantity"
         :cart="cart"
+        @order-completed="handlePlaceOrderSuccess"
       ></router-view>
-      <!-- The 'Access Denied' message will be handled by router guards or within components -->
     </main>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, provide } from "vue";
-import { useRouter } from "vue-router"; // useRoute is no longer needed here
+import { useRouter } from "vue-router";
 import AppNavbar from "./components/AppNavbar.vue";
 
-const router = useRouter(); // Initialize router
-// const route = useRoute(); // Removed as it was assigned but never used
+const router = useRouter();
 
-// Global state for the application
 const user = ref(null);
 const authToken = ref(null);
 const cart = ref([]);
 
 // Provide user and authToken to descendant components via provide/inject
-// This is an alternative to passing them as props through router-view
 provide("user", user);
 provide("authToken", authToken);
 provide("cart", cart); // Provide cart for CartSummary if it's not a direct child of router-view
 
-// Load user/token from localStorage on initial load
+// Define the main handleAddToCart function that will be provided
+const handleAddToCart = (product, quantity = 1) => {
+  const existingItem = cart.value.find((item) => item.id === product.id);
+  if (existingItem) {
+    cart.value = cart.value.map((item) =>
+      item.id === product.id
+        ? { ...item, quantity: item.quantity + quantity }
+        : item
+    );
+  } else {
+    // Also include stock information in cart item to validate quantity changes
+    cart.value = [
+      ...cart.value,
+      { ...product, quantity: quantity, stock: product.stock },
+    ];
+  }
+};
+
+// NEW: Handle quantity update from CartSummary
+const handleUpdateCartQuantity = (productId, newQuantity) => {
+  cart.value = cart.value.map((item) =>
+    item.id === productId ? { ...item, quantity: newQuantity } : item
+  );
+};
+
+// Provide the handleAddToCart and handleUpdateCartQuantity functions for injection in other components
+provide("handleAppAddToCart", handleAddToCart);
+provide("handleAppUpdateCartQuantity", handleUpdateCartQuantity); // NEW: Provide the update function
+
 onMounted(() => {
   const storedUser = localStorage.getItem("user");
   const storedToken = localStorage.getItem("authToken");
@@ -54,7 +77,7 @@ const handleLoginSuccess = (userData, token) => {
   authToken.value = token;
   localStorage.setItem("user", JSON.stringify(userData));
   localStorage.setItem("authToken", token);
-  router.push({ name: "products" }); // Use router.push for navigation
+  router.push({ name: "products" });
 };
 
 const handleLogout = () => {
@@ -62,32 +85,19 @@ const handleLogout = () => {
   authToken.value = null;
   localStorage.removeItem("user");
   localStorage.removeItem("authToken");
-  cart.value = [];
-  router.push({ name: "home" }); // Use router.push for navigation
-};
-
-const handleAddToCart = (product) => {
-  const existingItem = cart.value.find((item) => item.id === product.id);
-  if (existingItem) {
-    cart.value = cart.value.map((item) =>
-      item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
-    );
-  } else {
-    cart.value = [...cart.value, { ...product, quantity: 1 }];
-  }
+  cart.value = []; // Clear cart on logout
+  router.push({ name: "home" });
 };
 
 const handleRemoveFromCart = (productId) => {
   cart.value = cart.value.filter((item) => item.id !== productId);
 };
 
+// This function is now called when the order is successfully finalized on the PaymentPage
 const handlePlaceOrderSuccess = () => {
-  cart.value = []; // Clear cart after successful order
-  router.push({ name: "orders" }); // Navigate to orders page after successful order
+  cart.value = []; // Clear cart only after payment is confirmed/order is finalized
+  // The redirection to 'orders' page is now handled within PaymentPage.vue
 };
-
-// If a component needs access to the `router` or `route` objects directly,
-// they can use `useRouter()` and `useRoute()` within their setup.
 </script>
 
 <style>

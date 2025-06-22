@@ -6,6 +6,9 @@
       :auth-token="props.authToken"
       @remove-from-cart="emit('remove-from-cart', $event)"
       @place-order="emit('place-order')"
+      @update-quantity="
+        emit('update-cart-quantity', $event.productId, $event.newQuantity)
+      "
     />
   </div>
 </template>
@@ -14,10 +17,6 @@
 import { defineProps, defineEmits } from "vue";
 import CartSummary from "./CartSummary.vue";
 
-// Define props and assign them to a variable named 'props'.
-// This ensures that 'props' itself is a reactive object,
-// and its properties (props.cart, props.user, props.authToken)
-// remain reactive when accessed through 'props'.
 const props = defineProps({
   cart: {
     type: Array,
@@ -27,7 +26,12 @@ const props = defineProps({
   authToken: String,
 });
 
-const emit = defineEmits(["remove-from-cart", "place-order"]);
+// Added 'update-cart-quantity' to emits
+const emit = defineEmits([
+  "remove-from-cart",
+  "place-order",
+  "update-cart-quantity",
+]);
 </script>
 
 <style scoped>

@@ -5,11 +5,13 @@ namespace App\Services;
 
 require_once dirname(__FILE__) . '/../repositories/UserRepository.php';
 require_once dirname(__FILE__) . '/../models/User.php';
-require_once dirname(__FILE__) . '/../utils/Mailer.php'; // NEW: Include Mailer utility
+require_once dirname(__FILE__) . '/../utils/Mailer.php';
+require_once dirname(__FILE__) . '/../utils/JWTUtility.php'; // NEW: Include JWTUtility
 
 use App\Repositories\UserRepository;
 use App\Models\User;
-use App\Utils\Mailer; // NEW: Use Mailer class
+use App\Utils\Mailer;
+use App\Utils\JWTUtility; // NEW: Use JWTUtility class
 
 class UserService {
     private $userRepository;
@@ -103,13 +105,17 @@ class UserService {
     }
 
     /**
-     * Authenticates a user and generates a token (simplified for now).
+     * Authenticates a user and generates a token.
      * @param string $identifier User's username or email.
      * @param string $password User's plain text password.
      * @return array|false Returns an array with 'user' (User model) and 'token' on success, false on failure.
      */
     public function loginUser(string $identifier, string $password) {
-        $userData = $this->userRepository->findByUsername($identifier); // Or findByEmail
+        // Try to find by username first, then by email if not found
+        $userData = $this->userRepository->findByUsername($identifier);
+        if (!$userData) {
+            $userData = $this->userRepository->findByEmail($identifier);
+        }
 
         if (!$userData) {
             error_log("UserService: Login failed - User not found for identifier: " . $identifier);
@@ -123,7 +129,19 @@ class UserService {
             return false;
         }
 
-        $token = bin2hex(random_bytes(32));
+        // NEW: Generate a JWT upon successful login
+        $jwtPayload = [
+            'user_id' => $user->id,
+            'username' => $user->username,
+            'email' => $user->email,
+            'role' => $user->role
+        ];
+        $token = JWTUtility::generateToken($jwtPayload, 60 * 24); // Token valid for 24 hours
+
+        if (empty($token)) {
+            error_log("UserService: Login failed - Failed to generate JWT.");
+            return false;
+        }
 
         return [
             'user' => $user,

@@ -41,25 +41,35 @@
         :is-admin="isAdmin"
         @edit="handleEdit"
         @delete="handleDelete"
-        @add-to-cart="emit('add-to-cart', $event)"
+        @add-to-cart="handleAddToCart"
       />
     </div>
+
+    <!-- Add to Cart Notification -->
+    <AddToCartNotification
+      :is-visible="showAddToCartNotification"
+      :product-name="notificationProductName"
+      :quantity-added="notificationQuantityAdded"
+      @close="showAddToCartNotification = false"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch, defineProps, defineEmits } from "vue";
+import { ref, onMounted, watch, defineProps, inject } from "vue"; // Removed defineEmits
 import { apiCall } from "@/utils/api";
 import { LoadingSpinner, Message } from "@/utils/components";
 import GraphicCardForm from "./GraphicCardForm.vue";
 import ProductCard from "./ProductCard.vue";
+import AddToCartNotification from "./AddToCartNotification.vue";
 
 const props = defineProps({
   user: Object,
   authToken: String,
 });
 
-const emit = defineEmits(["add-to-cart"]);
+// Removed 'cart' injection as it was unused here.
+const handleAppAddToCart = inject("handleAppAddToCart"); // Inject the main add to cart function from App.vue
 
 const products = ref([]);
 const loading = ref(true);
@@ -68,6 +78,12 @@ const messageType = ref("");
 const isFormOpen = ref(false);
 const currentProduct = ref(null);
 const isAdmin = ref(props.user && props.user.role === "admin");
+
+// NEW: State for AddToCartNotification
+const showAddToCartNotification = ref(false);
+const notificationProductName = ref("");
+const notificationQuantityAdded = ref(0);
+let notificationTimeout = null; // To clear previous timeouts
 
 const fetchProducts = async () => {
   loading.value = true;
@@ -89,8 +105,10 @@ watch(
   () => props.user,
   (newUser) => {
     isAdmin.value = newUser && newUser.role === "admin";
+    fetchProducts(); // Refetch if user changes (e.g., login/logout)
   }
 );
+watch(() => props.authToken, fetchProducts);
 
 const handleEdit = (product) => {
   currentProduct.value = product;
@@ -141,6 +159,24 @@ const handleFormSubmit = async (formData, isEdit) => {
   } finally {
     loading.value = false;
   }
+};
+
+// NEW: Handle add to cart from ProductCard and show notification
+const handleAddToCart = (product, quantity = 1) => {
+  handleAppAddToCart(product, quantity); // Call the main App.vue cart logic
+
+  // Show notification
+  notificationProductName.value = product.name;
+  notificationQuantityAdded.value = quantity;
+  showAddToCartNotification.value = true;
+
+  // Clear any existing timeout and set a new one
+  if (notificationTimeout) {
+    clearTimeout(notificationTimeout);
+  }
+  notificationTimeout = setTimeout(() => {
+    showAddToCartNotification.value = false;
+  }, 3000); // Notification visible for 3 seconds
 };
 </script>
 

@@ -3,388 +3,222 @@
 
 namespace App\Services;
 
-require_once dirname(__FILE__) . '/../repositories/OrderRepository.php';
-require_once dirname(__FILE__) . '/../repositories/OrderItemRepository.php';
-require_once dirname(__FILE__) . '/../repositories/GraphicCardRepository.php';
-require_once dirname(__FILE__) . '/../repositories/UserRepository.php';
-require_once dirname(__FILE__) . '/../models/Order.php';
-require_once dirname(__FILE__) . '/../models/OrderItem.php';
-require_once dirname(__FILE__) . '/../models/User.php';
-require_once dirname(__FILE__) . '/../utils/Mailer.php';
-require_once dirname(__FILE__) . '/../utils/PdfGenerator.php';
-
+use \PDOException;
+use App\Models\Order;
+use App\Models\OrderItem;
 use App\Repositories\OrderRepository;
 use App\Repositories\OrderItemRepository;
 use App\Repositories\GraphicCardRepository;
 use App\Repositories\UserRepository;
-use App\Models\Order;
-use App\Models\OrderItem;
-use App\Models\User;
-use App\Utils\Mailer;
-use App\Utils\PdfGenerator;
+
+// REQUIRED REPOSITORIES
+require_once dirname(__FILE__) . '/../repositories/OrderRepository.php';
+require_once dirname(__FILE__) . '/../repositories/OrderItemRepository.php';
+require_once dirname(__FILE__) . '/../repositories/GraphicCardRepository.php';
+require_once dirname(__FILE__) . '/../repositories/UserRepository.php';
+
+// REQUIRED MODELS
+require_once dirname(__FILE__) . '/../models/Order.php';
+require_once dirname(__FILE__) . '/../models/OrderItem.php';
+require_once dirname(__FILE__) . '/../models/User.php';
+
 
 class OrderService {
     private $orderRepository;
-    private $graphicCardRepository;
     private $orderItemRepository;
+    private $graphicCardRepository;
     private $userRepository;
 
     public function __construct() {
         $this->orderRepository = new OrderRepository();
-        $this->graphicCardRepository = new GraphicCardRepository();
         $this->orderItemRepository = new OrderItemRepository();
+        $this->graphicCardRepository = new GraphicCardRepository();
         $this->userRepository = new UserRepository();
     }
 
-    /**
-     * Retrieves all orders, including their associated order items.
-     *
-     * @return array An array of Order model instances, each with an 'items' property containing OrderItem models.
-     */
-    public function getAllOrders() {
-        $ordersData = $this->orderRepository->getAll();
+    public function getAllOrders(?int $userId = null) {
+        $ordersData = $this->orderRepository->getAll($userId);
         $orders = [];
-        foreach ($ordersData as $data) {
-            $order = new Order($data);
-            
-            $rawItems = $this->orderItemRepository->getAllByOrderId($order->id);
-            $hydratedItems = [];
-            foreach ($rawItems as $itemData) {
-                $hydratedItems[] = new OrderItem($itemData);
+        foreach ($ordersData as $orderData) {
+            $order = new Order($orderData);
+            if (empty($order->username) && isset($orderData['user_id'])) {
+                $userData = $this->userRepository->getUserById($orderData['user_id']);
+                if ($userData) {
+                    $order->username = $userData['username'];
+                }
             }
-            $order->items = $hydratedItems;
-            
+            $itemsData = $this->orderItemRepository->getAllByOrderId($order->id);
+            $orderItems = [];
+            foreach ($itemsData as $itemData) {
+                $orderItems[] = new OrderItem($itemData);
+            }
+            $order->items = $orderItems;
             $orders[] = $order;
         }
         return $orders;
     }
 
-    public function getOrderById(int $id) {
-        $orderData = $this->orderRepository->getById($id);
-        if ($orderData) {
-            return $orderData;
+    public function getOrderById(int $orderId) {
+        $orderData = $this->orderRepository->getById($orderId);
+        if (!$orderData) {
+            return false;
         }
-        return false;
+        $order = new Order($orderData);
+        if (empty($order->username) && isset($orderData['user_id'])) {
+            $userData = $this->userRepository->getUserById($orderData['user_id']);
+            if ($userData) {
+                $order->username = $userData['username'];
+            }
+        }
+        $itemsData = $this->orderItemRepository->getAllByOrderId($order->id);
+        $orderItems = [];
+        foreach ($itemsData as $itemData) {
+            $orderItems[] = new OrderItem($itemData);
+        }
+        $order->items = $orderItems;
+        return $order;
     }
 
     /**
-     * Creates a new order.
+     * Creates a new order along with its items and decrements stock.
+     * This entire operation is wrapped in a database transaction to ensure atomicity.
      *
      * @param int $userId The ID of the user placing the order.
-     * @param array $items An array of associative arrays, each with 'graphic_card_id' and 'quantity'.
-     * @return array|false Returns the created Order data (associative array) on success, false on failure.
+     * @param array $itemsData An array of associative arrays, each representing an order item:
+     * ['graphic_card_id' => int, 'quantity' => int, 'price_at_purchase' => float]
+     * @return Order|array Returns the created Order object (with items and username) on success,
+     * or an associative array with error details on failure (e.g., ['success' => false, 'message' => '...', 'error_code' => '...']).
      */
-    public function createOrder(int $userId, array $items) {
-        if (empty($userId) || empty($items)) {
-            return false;
-        }
-
+    public function createOrder(int $userId, array $itemsData) {
+        error_log("OrderService: createOrder method started.");
         $totalAmount = 0;
-        $orderItemsDataForCreation = [];
-        $graphicCardStockUpdates = []; // NEW: Store stock updates to apply after order creation
+        $processedItems = [];
 
-        // First pass: Validate stock and calculate total, prepare items and stock updates
-        foreach ($items as $item) {
-            if (empty($item['graphic_card_id']) || empty($item['quantity']) || !is_numeric($item['quantity']) || $item['quantity'] <= 0) {
-                error_log("OrderService: Invalid item data received for graphic_card_id or quantity.");
-                return false;
-            }
-
-            $graphicCard = $this->graphicCardRepository->getById($item['graphic_card_id']);
-            if (!$graphicCard) {
-                error_log("OrderService: Graphic card with ID " . $item['graphic_card_id'] . " not found.");
-                return false;
-            }
-            if ($graphicCard['stock'] < $item['quantity']) {
-                error_log("OrderService: Not enough stock for graphic card ID " . $item['graphic_card_id'] . ". Requested: " . $item['quantity'] . ", Available: " . $graphicCard['stock']);
-                return false; // Not enough stock
-            }
-
-            $itemPrice = (float)$graphicCard['price'];
-            $totalAmount += $itemPrice * $item['quantity'];
-
-            $orderItemsDataForCreation[] = [
-                'graphic_card_id' => (int)$item['graphic_card_id'],
-                'quantity' => (int)$item['quantity'],
-                'price_at_purchase' => $itemPrice,
-                'graphic_card_name' => $graphicCard['name'] // Include name for email/PDF consistency
-            ];
-
-            // NEW: Prepare stock decrement for this graphic card
-            $graphicCardStockUpdates[] = [
-                'id' => (int)$item['graphic_card_id'],
-                'quantity' => (int)$item['quantity']
-            ];
+        error_log("OrderService: Attempting to begin transaction.");
+        if (!$this->orderRepository->beginTransaction()) {
+            error_log("OrderService: Failed to begin transaction.");
+            return ['success' => false, 'message' => 'Failed to initiate order transaction.', 'error_code' => 'TRANSACTION_FAILED'];
         }
+        error_log("OrderService: Transaction begun successfully.");
 
-        $orderData = [
-            'user_id' => $userId,
-            'total_amount' => $totalAmount,
-            'status' => 'pending',
-            'items' => $orderItemsDataForCreation
-        ];
-
-        // Begin transaction to ensure atomicity of order creation and stock update
         try {
-            $this->orderRepository->beginTransaction(); // Assumes Repository has beginTransaction method
-
-            $newOrderId = $this->orderRepository->create($orderData);
-
-            if ($newOrderId) {
-                // NEW: Decrement stock for each item after successful order creation
-                foreach ($graphicCardStockUpdates as $update) {
-                    $stockDecremented = $this->graphicCardRepository->decrementStock($update['id'], $update['quantity']);
-                    if (!$stockDecremented) {
-                        // If stock decrement fails for any reason, rollback the entire order
-                        error_log("OrderService: Failed to decrement stock for graphic card ID {$update['id']} during order creation.");
-                        $this->orderRepository->rollBack();
-                        return false;
-                    }
+            // 1. Validate items and calculate total amount before any database modifications
+            foreach ($itemsData as $item) {
+                if (!isset($item['graphic_card_id']) || !isset($item['quantity']) || !isset($item['price_at_purchase'])) {
+                    throw new \Exception("Missing required item data.", 400); // Using HTTP status codes for custom exception codes
                 }
 
-                $this->orderRepository->commitTransaction(); // Assumes Repository has commitTransaction method
+                $graphicCard = $this->graphicCardRepository->getById($item['graphic_card_id']);
 
-                $createdOrderData = $this->orderRepository->getById($newOrderId);
-                
-                $user = $this->userRepository->getUserById($userId);
-                if ($user && isset($user['email'])) {
-                    $recipientEmail = $user['email'];
-                    $subject = "Your GPU Shop Order Confirmation - Order #" . $newOrderId;
-                    $messageBody = "
-                        <p>Dear {$user['username']},</p>
-                        <p>Thank you for your order! Your order #<strong>{$newOrderId}</strong> has been successfully placed.</p>
-                        <p><strong>Order Summary:</strong></p>
-                        <ul>";
-                    foreach ($createdOrderData['items'] as $item) {
-                        $messageBody .= "<li>{$item['graphic_card_name']} (x{$item['quantity']}) - \${$item['price_at_purchase']} each</li>";
-                    }
-                    $messageBody .= "
-                        </ul>
-                        <p><strong>Total Amount:</strong> \${$createdOrderData['total_amount']}</p>
-                        <p><strong>Current Status:</strong> " . ucfirst($createdOrderData['status']) . "</p>
-                        <p>We will notify you once your order has been processed and shipped.</p>
-                        <p>Best regards,</p>
-                        <p>The GPU Shop Team</p>
-                    ";
-                    Mailer::sendEmail($recipientEmail, $subject, $messageBody);
-                } else {
-                    error_log("OrderService: Could not send order confirmation email. User email not found for ID: {$userId}");
+                if (!$graphicCard) {
+                    throw new \Exception("Graphic card not found for ID: " . $item['graphic_card_id'], 404);
+                }
+                if ($graphicCard['stock'] < $item['quantity']) {
+                    throw new \Exception("Insufficient stock for graphic_card_id: " . $item['graphic_card_id'] . ". Available: " . $graphicCard['stock'] . ", Requested: " . $item['quantity'], 409); // 409 Conflict for insufficient stock
                 }
 
-                return $createdOrderData;
-            } else {
-                $this->orderRepository->rollBack(); // Rollback if order creation failed
-                return false;
+                error_log("OrderService: Validated and prepared item graphic_card_id: " . $item['graphic_card_id'] . ", quantity: " . $item['quantity']);
+
+                $totalAmount += $item['quantity'] * $item['price_at_purchase'];
+                $processedItems[] = $item;
             }
+
+            error_log("OrderService: All items validated successfully. Calculated total amount: " . $totalAmount);
+
+            // 2. Create the main order record
+            $orderData = [
+                'user_id' => $userId,
+                'total_amount' => $totalAmount,
+                'status' => 'pending'
+            ];
+
+            error_log("OrderService: Attempting to create main order record.");
+            $orderId = $this->orderRepository->create($orderData);
+
+            if (!$orderId) {
+                throw new \Exception("Failed to create main order record in the database.", 500);
+            }
+            error_log("OrderService: Main order record created with ID: " . $orderId . ". Proceeding to decrement stock.");
+
+            // 3. Decrement stock for each item
+            foreach ($processedItems as $item) {
+                error_log("OrderService: Decrementing stock for graphic_card_id: " . $item['graphic_card_id'] . ", quantity: " . $item['quantity']);
+                $stockDecremented = $this->graphicCardRepository->decrementStock($item['graphic_card_id'], $item['quantity']);
+                if (!$stockDecremented) {
+                    // This scenario should be rare if stock was checked before and transaction is active,
+                    // but it's a fallback for race conditions or unexpected DB behavior.
+                    throw new \Exception("Failed to decrement stock for graphic_card_id: " . $item['graphic_card_id'] . ". Stock may have been insufficient during update.", 409);
+                }
+            }
+            error_log("OrderService: All item stocks decremented successfully.");
+
+            // 4. Create individual order item records
+            $createdOrderItems = [];
+            foreach ($processedItems as $item) {
+                $orderItemData = [
+                    'order_id' => $orderId,
+                    'graphic_card_id' => $item['graphic_card_id'],
+                    'quantity' => $item['quantity'],
+                    'price_at_purchase' => $item['price_at_purchase']
+                ];
+                error_log("OrderService: Creating order item for graphic_card_id: " . $item['graphic_card_id']);
+                $orderItemId = $this->orderItemRepository->create($orderItemData);
+                if (!$orderItemId) {
+                    throw new \Exception("Failed to create order item for graphic_card_id: " . $item['graphic_card_id'], 500);
+                }
+
+                $graphicCardInfo = $this->graphicCardRepository->getById($item['graphic_card_id']);
+                $orderItemData['id'] = $orderItemId;
+                $orderItemData['graphic_card_name'] = $graphicCardInfo['name'] ?? 'Unknown Graphic Card';
+                $createdOrderItems[] = new OrderItem($orderItemData);
+            }
+            error_log("OrderService: All order items created successfully.");
+
+            // If all operations were successful, commit the transaction
+            error_log("OrderService: Attempting to commit transaction.");
+            if (!$this->orderRepository->commitTransaction()) {
+                throw new \Exception("Failed to commit transaction.", 500);
+            }
+            error_log("OrderService: Transaction committed successfully.");
+
+            // Fetch the complete order details including username for the final response
+            $finalOrder = $this->orderRepository->getById($orderId);
+            if ($finalOrder) {
+                $orderModel = new Order($finalOrder);
+                $orderModel->items = $createdOrderItems;
+                return $orderModel; // Success: Return the Order model
+            } else {
+                error_log("OrderService: Failed to retrieve order after successful creation and commit. Order ID: " . $orderId);
+                return ['success' => false, 'message' => 'Order created but failed to retrieve details.', 'error_code' => 'ORDER_RETRIEVAL_FAILED', 'http_status' => 500];
+            }
+
+        } catch (PDOException $e) {
+            error_log("OrderService: PDOException during order creation: " . $e->getMessage());
+            error_log("OrderService: Rolling back transaction due to PDOException.");
+            $this->orderRepository->rollBack();
+            return ['success' => false, 'message' => 'Database error during order creation: ' . $e->getMessage(), 'error_code' => 'DB_ERROR', 'http_status' => 500];
         } catch (\Exception $e) {
-            $this->orderRepository->rollBack(); // Catch any other exceptions and rollback
-            error_log("OrderService: Transaction failed during order creation: " . $e->getMessage());
-            return false;
+            error_log("OrderService: General Exception during order creation: " . $e->getMessage());
+            error_log("OrderService: Rolling back transaction due to general exception.");
+            $this->orderRepository->rollBack();
+            // Return structured error including the custom code (HTTP status) from the exception
+            return ['success' => false, 'message' => $e->getMessage(), 'error_code' => 'APPLICATION_ERROR', 'http_status' => $e->getCode() ?: 400];
+        } finally {
+            error_log("OrderService: createOrder method finished.");
+            // The rollBack() method itself checks if a transaction is active before trying to roll back.
+            $this->orderRepository->rollBack(); // Ensure rollback is attempted if transaction is still active for any reason
         }
     }
 
-    /**
-     * Updates an existing order.
-     *
-     * @param int $id The ID of the order to update.
-     * @param array $data Associative array of fields to update (e.g., 'status').
-     * @return array|false Returns the updated Order data (associative array) on success, false on failure.
-     */
-    public function updateOrder(int $id, array $data) {
-        $currentOrder = $this->orderRepository->getById($id);
-        if (!$currentOrder) {
-            error_log("OrderService: Attempted to update non-existent order ID: " . $id);
-            return false; // Order not found
-        }
-
-        $updateFields = [];
-        if (isset($data['user_id'])) {
-             $updateFields['user_id'] = $data['user_id'];
-        }
-        if (isset($data['total_amount'])) {
-            $updateFields['total_amount'] = $data['total_amount'];
-        }
-        if (isset($data['status'])) {
-            $allowedStatuses = ['pending', 'processing', 'shipped', 'completed', 'cancelled'];
-            if (!in_array($data['status'], $allowedStatuses)) {
-                error_log("OrderService: Invalid status provided for order ID " . $id . ": " . $data['status']);
-                return false; // Invalid status
-            }
-            $updateFields['status'] = $data['status'];
-        }
-
-        if (empty($updateFields)) {
-            error_log("OrderService: No valid fields provided for update for order ID: " . $id);
-            return false; // No valid fields to update
-        }
-
-        $success = $this->orderRepository->update($id, $updateFields);
-
+    public function updateOrder(int $orderId, array $data) {
+        $success = $this->orderRepository->update($orderId, $data);
         if ($success) {
-            $updatedOrderData = $this->orderRepository->getById($id);
-
-            // Generate PDF Invoice if status is 'completed' (or 'paid')
-            if (isset($updateFields['status']) && $updateFields['status'] === 'completed') {
-                $user = $this->userRepository->getUserById($updatedOrderData['user_id']);
-                if ($user && isset($user['email'])) {
-                    $invoiceHtml = $this->generateInvoiceHtml($updatedOrderData, $user);
-                    $filename = "invoice_order_" . $updatedOrderData['id'] . "_" . date('Ymd_His') . ".pdf";
-                    $pdfOutput = PdfGenerator::generatePdf($invoiceHtml, $filename);
-
-                    if ($pdfOutput) {
-                        error_log("OrderService: Generated PDF invoice for order #{$updatedOrderData['id']}. Attaching to email.");
-                        $attachments = [[
-                            'content' => $pdfOutput,
-                            'name' => $filename,
-                            'type' => 'application/pdf'
-                        ]];
-                        $recipientEmail = $user['email'];
-                        $subject = "Your GPU Shop Invoice - Order #" . $updatedOrderData['id'];
-                        $messageBody = "
-                            <p>Dear {$user['username']},</p>
-                            <p>Your order #<strong>{$updatedOrderData['id']}</strong> has been marked as <strong>completed</strong>. Thank you for your purchase!</p>
-                            <p>Please find your invoice attached to this email.</p>
-                            <p>If you have any questions, please do not hesitate to contact us.</p>
-                            <p>Best regards,</p>
-                            <p>The GPU Shop Team</p>
-                        ";
-                        Mailer::sendEmail($recipientEmail, $subject, $messageBody, $attachments);
-                    } else {
-                        error_log("OrderService: Failed to generate PDF invoice for order #{$updatedOrderData['id']}.");
-                    }
-                } else {
-                    error_log("OrderService: Cannot generate invoice PDF. User email not found for ID: {$updatedOrderData['user_id']}");
-                }
-            }
-            
-            return $updatedOrderData;
+            return $this->getOrderById($orderId);
         }
-        error_log("OrderService: Database update failed for order ID: " . $id);
         return false;
     }
 
-    public function deleteOrder(int $id) {
-        return $this->orderRepository->delete($id);
-    }
-
-    /**
-     * Generates HTML content for the invoice.
-     * @param array $orderData The order data including items.
-     * @param array $userData The user data.
-     * @return string The HTML string for the invoice.
-     */
-    private function generateInvoiceHtml(array $orderData, array $userData): string {
-        $itemsHtml = '';
-        foreach ($orderData['items'] as $item) {
-            $itemName = htmlspecialchars($item['graphic_card_name'] ?? 'N/A');
-            $itemQuantity = htmlspecialchars($item['quantity']);
-            $itemPrice = number_format($item['price_at_purchase'], 2);
-            $itemTotal = number_format($item['quantity'] * $item['price_at_purchase'], 2);
-
-            $itemsHtml .= "
-                <tr>
-                    <td>{$itemName}</td>
-                    <td>{$itemQuantity}</td>
-                    <td>\${$itemPrice}</td>
-                    <td>\${$itemTotal}</td>
-                </tr>";
-        }
-
-        $invoiceDate = date('Y-m-d H:i:s');
-        $orderDate = date('Y-m-d', strtotime($orderData['order_date']));
-        $totalAmountFormatted = number_format($orderData['total_amount'], 2);
-
-        $userAddress = "N/A<br>N/A, N/A"; // Placeholder if not in user/order data
-
-        return "
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset='utf-8'>
-                <title>Invoice for Order #{$orderData['id']}</title>
-                <style>
-                    body { font-family: 'DejaVu Sans', sans-serif; font-size: 12px; line-height: 1.5; color: #333; }
-                    .container { max-width: 800px; margin: 20px auto; padding: 20px; border: 1px solid #eee; box-shadow: 0 0 10px rgba(0,0,0,0.05); }
-                    h1, h2, h3 { color: #000; }
-                    h1 { text-align: center; margin-bottom: 20px; }
-                    .invoice-header, .invoice-details, .order-items, .invoice-footer { margin-bottom: 20px; }
-                    .invoice-header table, .invoice-details table, .order-items table { width: 100%; border-collapse: collapse; }
-                    .invoice-header td, .invoice-details td, .order-items th, .order-items td { padding: 8px; border: 1px solid #eee; text-align: left; }
-                    .order-items th { background-color: #f2f2f2; }
-                    .total { text-align: right; font-weight: bold; font-size: 14px; padding-top: 10px; }
-                    .total td { border: none; }
-                    .text-right { text-align: right; }
-                </style>
-            </head>
-            <body>
-                <div class='container'>
-                    <h1>Invoice</h1>
-
-                    <div class='invoice-header'>
-                        <table>
-                            <tr>
-                                <td style='width:50%;'>
-                                    <strong>GPU Shop</strong><br>
-                                    123 Tech Avenue<br>
-                                    Silicon Valley, CA 90210<br>
-                                    Email: contact@gpushop.com
-                                </td>
-                                <td class='text-right' style='width:50%;'>
-                                    <strong>INVOICE #INV-{$orderData['id']}-" . date('Ymd') . "</strong><br>
-                                    Invoice Date: {$invoiceDate}<br>
-                                    Order Date: {$orderDate}<br>
-                                    Order ID: #{$orderData['id']}
-                                </td>
-                            </tr>
-                        </table>
-                    </div>
-
-                    <div class='invoice-details'>
-                        <table>
-                            <tr>
-                                <td style='width:50%;'>
-                                    <strong>Bill To:</strong><br>
-                                    " . htmlspecialchars($userData['username']) . "<br>
-                                    " . htmlspecialchars($userData['email']) . "<br>
-                                    {$userAddress}
-                                </td>
-                                <td class='text-right' style='width:50%;'>
-                                    <strong>Payment Status:</strong> Paid<br>
-                                    <strong>Order Status:</strong> " . ucfirst($orderData['status']) . "
-                                </td>
-                            </tr>
-                        </table>
-                    </div>
-
-                    <div class='order-items'>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Item</th>
-                                    <th>Quantity</th>
-                                    <th>Unit Price</th>
-                                    <th>Total</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {$itemsHtml}
-                            </tbody>
-                            <tfoot>
-                                <tr class='total'>
-                                    <td colspan='3'>Total Amount:</td>
-                                    <td>\${$totalAmountFormatted}</td>
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </div>
-
-                    <div class='invoice-footer' style='text-align: center; margin-top: 30px; font-size: 10px; color: #777;'>
-                        <p>Thank you for your business!</p>
-                        <p>&copy; " . date('Y') . " GPU Shop. All rights reserved.</p>
-                    </div>
-                </div>
-            </body>
-            </html>
-        ";
+    public function deleteOrder(int $orderId) {
+        return $this->orderRepository->delete($orderId);
     }
 }
