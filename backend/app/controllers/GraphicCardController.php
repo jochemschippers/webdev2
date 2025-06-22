@@ -14,20 +14,12 @@ class GraphicCardController extends Controller
 {
     private $graphicCardService;
 
-    /**
-     * Constructor for GraphicCardController.
-     * Initializes the GraphicCardService.
-     */
     public function __construct()
     {
         parent::__construct(); // Call the parent constructor to set up headers
         $this->graphicCardService = new GraphicCardService(); // Instantiate the GraphicCardService
     }
 
-    /**
-     * Handles retrieving all graphic cards.
-     * Route: GET /api/graphic-cards
-     */
     public function index()
     {
         $graphicCards = $this->graphicCardService->getAllGraphicCards();
@@ -61,11 +53,6 @@ class GraphicCardController extends Controller
         }
     }
 
-    /**
-     * Handles retrieving a single graphic card by ID.
-     * Route: GET /api/graphic-cards/{id}
-     * @param int $id The ID of the graphic card to retrieve.
-     */
     public function show(int $id)
     {
         $graphicCard = $this->graphicCardService->getGraphicCardById($id);
@@ -93,11 +80,6 @@ class GraphicCardController extends Controller
         }
     }
 
-    /**
-     * Handles creating a new graphic card.
-     * Route: POST /api/graphic-cards
-     * Data comes from $_POST and $_FILES for multipart/form-data.
-     */
     public function store()
     {
         // For multipart/form-data, data is in $_POST and files in $_FILES
@@ -112,7 +94,6 @@ class GraphicCardController extends Controller
             $this->errorResponse("Missing required fields: name, brand_id, gpu_model, vram_gb, interface, price, stock.", 400);
         }
 
-        // Delegate to service to handle creation logic, passing both data and file
         $newGraphicCard = $this->graphicCardService->createGraphicCard($data, $file);
 
         if ($newGraphicCard) {
@@ -131,7 +112,7 @@ class GraphicCardController extends Controller
                     "price" => (float)$newGraphicCard->price,
                     "stock" => (int)$newGraphicCard->stock,
                     "description" => $newGraphicCard->description,
-                    "image_url" => $newGraphicCard->image_url // This will be the path returned by the uploader
+                    "image_url" => $newGraphicCard->image_url // path returned by the uploader
                 ]
             ], 201);
         } else {
@@ -139,13 +120,6 @@ class GraphicCardController extends Controller
         }
     }
 
-    /**
-     * Handles updating an existing graphic card.
-     * Route: PUT /api/graphic-cards/{id}
-     * Data can come from $_POST (multipart/form-data) or php://input (application/json).
-     * We need to handle both.
-     * @param int $id The ID of the graphic card to update.
-     */
     public function update(int $id)
     {
         // Check Content-Type to determine how to get input
@@ -199,11 +173,6 @@ class GraphicCardController extends Controller
         }
     }
 
-    /**
-     * Handles deleting a graphic card.
-     * Route: DELETE /api/graphic-cards/{id}
-     * @param int $id The ID of the graphic card to delete.
-     */
     public function destroy(int $id)
     {
         $success = $this->graphicCardService->deleteGraphicCard($id);

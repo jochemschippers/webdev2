@@ -15,7 +15,7 @@
 
 <script setup>
 import { defineProps, defineEmits } from "vue";
-import CartSummary from "./CartSummary.vue";
+import CartSummary from "@/components/CartSummary.vue";
 
 const props = defineProps({
   cart: {

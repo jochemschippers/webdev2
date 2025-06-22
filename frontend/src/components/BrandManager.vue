@@ -85,7 +85,7 @@
 import { ref, onMounted, watch, defineProps } from "vue";
 import { apiCall } from "@/utils/api";
 import { LoadingSpinner, Message } from "@/utils/components";
-import BrandForm from "./BrandForm.vue"; // Will be created next
+import BrandForm from "@/forms/BrandForm.vue"; // Will be created next
 
 const props = defineProps({
   authToken: String,

@@ -7,8 +7,7 @@ require_once __DIR__ . '/Controller.php';
 require_once dirname(__FILE__) . '/../services/OrderService.php';
 
 use App\Services\OrderService;
-use App\Models\Order;
-use App\Models\OrderItem;
+use App\Utils\Response;
 
 class OrderController extends Controller
 {
@@ -21,55 +20,48 @@ class OrderController extends Controller
     }
 
     /**
-     * Handles retrieving all orders.
-     * If $userId is provided (from authenticated user), it fetches orders for that user.
-     * If $role is 'admin', it fetches all orders.
-     *
-     * @param int|null $userId The ID of the authenticated user (optional).
-     * @param string|null $role The role of the authenticated user (optional).
+     * Handles retrieving all orders (for admin) or orders for a specific user.
      * Route: GET /api/orders
+     * @param int|null $authUserId The authenticated user's ID (from JWT).
+     * @param string|null $authUserRole The authenticated user's role (from JWT).
      */
-    public function index(?int $userId = null, ?string $role = null)
+    public function index(?int $authUserId = null, ?string $authUserRole = null)
     {
         $orders = [];
-        if ($role === 'admin') {
-            $orders = $this->orderService->getAllOrders(); // Admins see all orders
-        } elseif ($userId !== null) {
-            $orders = $this->orderService->getAllOrders($userId); // Regular users see their own orders
+        if ($authUserRole === 'admin') {
+            // Admins can see all orders
+            $orders = $this->orderService->getAllOrders();
+        } elseif ($authUserId !== null) {
+            // Regular users can only see their own orders
+            $orders = $this->orderService->getAllOrders($authUserId);
         } else {
-            // This case should ideally be caught by middleware for authenticated routes,
-            // but as a fallback, if no user ID, no orders can be displayed.
-            $this->errorResponse("Authentication required or no orders found for this user.", 401);
-            return;
+            Response::error("Authentication required to view orders.", 401);
+            return; // Exit to prevent further execution
         }
-
 
         if (!empty($orders)) {
             $orders_arr = [];
             foreach ($orders as $order) {
-                $orderItems_arr = [];
-                if (!empty($order->items) && is_array($order->items)) {
-                    foreach ($order->items as $item) {
-                        $orderItems_arr[] = [
-                            "id" => $item->id,
-                            "order_id" => $item->order_id,
-                            "graphic_card_id" => $item->graphic_card_id,
-                            "quantity" => (int)$item->quantity, // Ensure quantity is integer for JSON
-                            "price_at_purchase" => (float)$item->price_at_purchase,
-                            "graphic_card_name" => $item->graphic_card_name
-                        ];
-                    }
+                $order_items_arr = [];
+                foreach ($order->items as $item) {
+                    $order_items_arr[] = [
+                        "id" => $item->id,
+                        "graphic_card_id" => $item->graphic_card_id,
+                        "graphic_card_name" => $item->graphic_card_name,
+                        "quantity" => $item->quantity,
+                        "price_at_purchase" => $item->price_at_purchase
+                    ];
                 }
 
                 $orders_arr[] = [
                     "id" => $order->id,
                     "user_id" => $order->user_id,
-                    "username" => $order->username,
-                    "total_amount" => (float)$order->total_amount,
+                    "username" => $order->username, // Included username
+                    "total_amount" => $order->total_amount,
                     "status" => $order->status,
                     "order_date" => $order->order_date,
                     "updated_at" => $order->updated_at,
-                    "items" => $orderItems_arr
+                    "items" => $order_items_arr // Include order items
                 ];
             }
             $this->jsonResponse($orders_arr, 200);
@@ -80,167 +72,128 @@ class OrderController extends Controller
 
     /**
      * Handles retrieving a single order by ID.
-     * Users can only view their own orders unless they are an admin.
-     *
-     * @param int $id The ID of the order to retrieve.
-     * @param int|null $authenticatedUserId The ID of the currently authenticated user.
-     * @param string|null $authenticatedUserRole The role of the currently authenticated user.
      * Route: GET /api/orders/{id}
+     * @param int $id The ID of the order to retrieve.
+     * @param int|null $authUserId The authenticated user's ID.
+     * @param string|null $authUserRole The authenticated user's role.
      */
-    public function show(int $id, ?int $authenticatedUserId = null, ?string $authenticatedUserRole = null)
+    public function show(int $id, ?int $authUserId = null, ?string $authUserRole = null)
     {
         $order = $this->orderService->getOrderById($id);
 
         if (!$order) {
             $this->errorResponse("Order not found.", 404);
+        }
+
+        // Authorization check: User can only view their own orders unless they are an admin
+        if ($order->user_id !== $authUserId && $authUserRole !== 'admin') {
+            Response::error("Access Denied. You do not have permission to view this order.", 403);
             return;
         }
 
-        // Authorization check: Only allow access if user is admin OR if it's their own order
-        if ($authenticatedUserRole !== 'admin' && $order->user_id !== $authenticatedUserId) {
-            $this->errorResponse("Access Denied. You do not have permission to view this order.", 403);
-            return;
+        $order_items_arr = [];
+        foreach ($order->items as $item) {
+            $order_items_arr[] = [
+                "id" => $item->id,
+                "graphic_card_id" => $item->graphic_card_id,
+                "graphic_card_name" => $item->graphic_card_name,
+                "quantity" => $item->quantity,
+                "price_at_purchase" => $item->price_at_purchase
+            ];
         }
 
-        $orderItems_arr = [];
-        if (!empty($order->items) && is_array($order->items)) {
-            foreach ($order->items as $item) {
-                $orderItems_arr[] = [
-                    "id" => $item->id,
-                    "order_id" => $item->order_id,
-                    "graphic_card_id" => $item->graphic_card_id,
-                    "quantity" => (int)$item->quantity, // Ensure quantity is integer for JSON
-                    "price_at_purchase" => (float)$item->price_at_purchase,
-                    "graphic_card_name" => $item->graphic_card_name
-                ];
-            }
-        }
         $this->jsonResponse([
-            "order" => [
-                "id" => $order->id,
-                "user_id" => $order->user_id,
-                "username" => $order->username,
-                "total_amount" => (float)$order->total_amount,
-                "status" => $order->status,
-                "order_date" => $order->order_date,
-                "updated_at" => $order->updated_at,
-                "items" => $orderItems_arr
-            ]
+            "id" => $order->id,
+            "user_id" => $order->user_id,
+            "username" => $order->username,
+            "total_amount" => $order->total_amount,
+            "status" => $order->status,
+            "order_date" => $order->order_date,
+            "updated_at" => $order->updated_at,
+            "items" => $order_items_arr
         ], 200);
     }
 
     /**
-     * Handles placing a new order.
-     * Expects JSON input with 'items' (an array of order item data).
-     * The 'user_id' is now provided by the authentication middleware.
-     *
-     * @param int $userId The ID of the authenticated user placing the order.
+     * Handles creating a new order.
      * Route: POST /api/orders
+     * @param int $authUserId The ID of the authenticated user placing the order.
      */
-    public function store(int $userId)
+    public function store(int $authUserId)
     {
         $data = $this->getJsonInput();
 
-        // The user_id is now passed directly, no need to check in $data
-        if (!isset($data['items']) || !is_array($data['items']) || empty($data['items'])) {
-            $this->errorResponse("A non-empty array of items is required to place an order.", 400);
-            return;
+        if (empty($data['items'])) {
+            $this->errorResponse("No items provided for the order.", 400);
         }
 
         $items = $data['items'];
+        $newOrder = $this->orderService->createOrder($authUserId, $items);
 
-        $newOrderResult = $this->orderService->createOrder($userId, $items);
-
-        if ($newOrderResult instanceof Order) {
-            $responseItems = [];
-            foreach ($newOrderResult->items as $item) {
-                $responseItems[] = [
-                    "id" => $item->id,
-                    "order_id" => $item->order_id,
-                    "graphic_card_id" => $item->graphic_card_id,
-                    "quantity" => (int)$item->quantity, // Ensure quantity is integer for JSON
-                    "price_at_purchase" => (float)$item->price_at_purchase,
-                    "graphic_card_name" => $item->graphic_card_name
-                ];
-            }
-
-            $this->jsonResponse([
-                "message" => "Order created successfully.",
+        if ($newOrder instanceof \App\Models\Order) { // Check if it's an Order object
+            // Format the response to include basic order details
+            $response = [
+                "message" => "Order placed successfully.",
                 "order" => [
-                    "id" => $newOrderResult->id,
-                    "user_id" => $newOrderResult->user_id,
-                    "username" => $newOrderResult->username,
-                    "total_amount" => (float)$newOrderResult->total_amount,
-                    "status" => $newOrderResult->status,
-                    "order_date" => $newOrderResult->order_date,
-                    "updated_at" => $newOrderResult->updated_at,
-                    "items" => $responseItems
+                    "id" => $newOrder->id,
+                    "user_id" => $newOrder->user_id,
+                    "total_amount" => $newOrder->total_amount,
+                    "status" => $newOrder->status,
+                    "order_date" => $newOrder->order_date,
+                    "items" => array_map(function($item) {
+                        return [
+                            "graphic_card_id" => $item->graphic_card_id,
+                            "quantity" => $item->quantity,
+                            "price_at_purchase" => $item->price_at_purchase
+                        ];
+                    }, $newOrder->items)
                 ]
-            ], 201);
-        } elseif (is_array($newOrderResult) && isset($newOrderResult['success']) && $newOrderResult['success'] === false) {
-            $message = $newOrderResult['message'] ?? 'Failed to create order.';
-            $statusCode = $newOrderResult['http_status'] ?? 400;
-            $this->errorResponse($message, $statusCode);
+            ];
+            $this->jsonResponse($response, 201);
+        } elseif (is_array($newOrder) && isset($newOrder['success']) && $newOrder['success'] === false) {
+            // Handle errors returned as an array from service layer
+            $this->errorResponse($newOrder['message'], $newOrder['http_status'] ?? 400);
         } else {
-            $this->errorResponse("Failed to create order. An unexpected server error occurred.", 500);
+            $this->errorResponse("Failed to place order.", 500);
         }
     }
 
     /**
-     * Handles updating an existing order.
-     * This route is protected by `AuthMiddleware` to require 'admin' role in `index.php`.
-     * @param int $id The ID of the order to update.
+     * Handles updating an existing order's status.
      * Route: PUT /api/orders/{id}
+     * This action is typically restricted to admin users.
+     * @param int $id The ID of the order to update.
      */
     public function update(int $id)
     {
         $data = $this->getJsonInput();
 
-        if (empty($data)) {
-            $this->errorResponse("No data provided for order update.", 400);
-            return;
+        if (empty($data['status'])) {
+            $this->errorResponse("Order status is required for update.", 400);
         }
 
-        $updatedOrder = $this->orderService->updateOrder($id, $data);
+        $status = $data['status'];
+        $success = $this->orderService->updateOrder($id, ['status' => $status]);
 
-        if ($updatedOrder) {
-            $responseItems = [];
-            if (!empty($updatedOrder->items) && is_array($updatedOrder->items)) {
-                foreach ($updatedOrder->items as $item) {
-                    $responseItems[] = [
-                        "id" => $item->id,
-                        "order_id" => $item->order_id,
-                        "graphic_card_id" => $item->graphic_card_id,
-                        "quantity" => (int)$item->quantity, // Ensure quantity is integer for JSON
-                        "price_at_purchase" => (float)$item->price_at_purchase,
-                        "graphic_card_name" => $item->graphic_card_name
-                    ];
-                }
-            }
-
+        if ($success) {
             $this->jsonResponse([
-                "message" => "Order updated successfully.",
+                "message" => "Order status updated successfully.",
                 "order" => [
-                    "id" => $updatedOrder->id,
-                    "user_id" => $updatedOrder->user_id,
-                    "username" => $updatedOrder->username,
-                    "total_amount" => (float)$updatedOrder->total_amount,
-                    "status" => $updatedOrder->status,
-                    "order_date" => $updatedOrder->order_date,
-                    "updated_at" => $updatedOrder->updated_at,
-                    "items" => $responseItems
+                    "id" => $success->id,
+                    "status" => $success->status,
+                    "total_amount" => $success->total_amount // Return updated details
                 ]
             ], 200);
         } else {
-            $this->errorResponse("Failed to update order or order not found/invalid data.", 404);
+            $this->errorResponse("Failed to update order status or order not found.", 400);
         }
     }
 
     /**
      * Handles deleting an order.
-     * This route is protected by `AuthMiddleware` to require 'admin' role in `index.php`.
-     * @param int $id The ID of the order to delete.
      * Route: DELETE /api/orders/{id}
+     * This action is typically restricted to admin users.
+     * @param int $id The ID of the order to delete.
      */
     public function destroy(int $id)
     {
@@ -249,7 +202,7 @@ class OrderController extends Controller
         if ($success) {
             $this->jsonResponse(["message" => "Order deleted successfully."], 200);
         } else {
-            $this->errorResponse("Failed to delete order or order not found.", 404);
+            $this->errorResponse("Failed to delete order or order not found.", 400);
         }
     }
 }

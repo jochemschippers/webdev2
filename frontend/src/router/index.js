@@ -1,16 +1,19 @@
+// src/router/index.js
+
 import { createRouter, createWebHistory } from "vue-router";
-import HomePage from "@/components/HomePage.vue";
-import ProductListPage from "@/components/ProductListPage.vue"; // Changed from ProductLayout
-import LoginPage from "@/components/LoginPage.vue";
-import RegisterPage from "@/components/RegisterPage.vue";
-import AdminPanel from "@/components/AdminPanel.vue";
-import ManufacturerManager from "@/components/ManufacturerManager.vue";
-import BrandManager from "@/components/BrandManager.vue";
-import OrderManager from "@/components/OrderManager.vue";
-import CartPage from "@/components/CartPage.vue";
-import PaymentPage from "@/components/PaymentPage.vue"; // NEW: Import PaymentPage
-import GraphicCardDetailPage from "@/components/GraphicCardDetailPage.vue";
-import UserManager from "@/components/UserManager.vue"; // Ensure UserManager is imported
+// Updated imports based on new folder structure
+import HomePage from "@/pages/HomePage.vue";
+import ProductListPage from "@/pages/ProductListPage.vue";
+import LoginPage from "@/pages/LoginPage.vue";
+import RegisterPage from "@/pages/RegisterPage.vue";
+import AdminPanel from "@/components/AdminPanel.vue"; // This remains in components
+import ManufacturerManager from "@/components/ManufacturerManager.vue"; // This remains in components
+import BrandManager from "@/components/BrandManager.vue"; // This remains in components
+import OrderManager from "@/components/OrderManager.vue"; // This remains in components
+import UserManager from "@/components/UserManager.vue"; // This remains in components
+import GraphicCardDetailPage from "@/pages/GraphicCardDetailPage.vue";
+import CartPage from "@/pages/CartPage.vue";
+import PaymentPage from "@/pages/PaymentPage.vue";
 
 const routes = [
   {
@@ -21,41 +24,13 @@ const routes = [
   {
     path: "/products",
     name: "products",
-    component: ProductListPage, // Changed from ProductLayout
-    props: (route) => ({
-      user: route.meta.user,
-      authToken: route.meta.authToken,
-      cart: route.meta.cart,
-    }),
+    component: ProductListPage,
   },
   {
     path: "/graphic-cards/:id",
     name: "graphic-card-detail",
     component: GraphicCardDetailPage,
-    props: true, // This tells Vue Router to pass route.params.id as a prop to the component
-  },
-  {
-    path: "/cart",
-    name: "cart",
-    component: CartPage,
-    meta: { requiresAuth: true },
-    props: (route) => ({
-      user: route.meta.user,
-      authToken: route.meta.authToken,
-      cart: route.meta.cart,
-    }),
-  },
-  {
-    path: "/checkout/:orderId",
-    name: "checkout",
-    component: PaymentPage,
-    meta: { requiresAuth: true }, // Payment page requires user to be logged in
-    props: (route) => ({
-      // Pass props to PaymentPage
-      orderId: route.params.orderId,
-      user: route.meta.user,
-      authToken: route.meta.authToken,
-    }),
+    props: true,
   },
   {
     path: "/login",
@@ -66,6 +41,29 @@ const routes = [
     path: "/register",
     name: "register",
     component: RegisterPage,
+  },
+  {
+    path: "/cart",
+    name: "cart",
+    component: CartPage,
+  },
+  {
+    path: "/payment",
+    name: "payment",
+    component: PaymentPage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/orders",
+    name: "orders",
+    component: OrderManager,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/orders/:id",
+    name: "order-detail",
+    props: true,
+    meta: { requiresAuth: true },
   },
   {
     path: "/admin",
@@ -86,43 +84,27 @@ const routes = [
     meta: { requiresAuth: true, requiresAdmin: true },
   },
   {
-    path: "/orders",
-    name: "orders",
-    component: OrderManager,
-    meta: { requiresAuth: true },
-  },
-  {
     path: "/admin/orders",
     name: "admin-orders",
     component: OrderManager,
     meta: { requiresAuth: true, requiresAdmin: true },
   },
   {
-    path: "/admin/users", // Re-added NEW ROUTE: User Management
+    path: "/admin/users",
     name: "admin-users",
     component: UserManager,
     meta: { requiresAuth: true, requiresAdmin: true },
   },
-  // Catch-all for 404
-  {
-    path: "/:catchAll(.*)",
-    name: "NotFound",
-    redirect: "/",
-  },
 ];
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory("/"),
   routes,
 });
 
+// Navigation guard to check authentication and roles
 router.beforeEach((to, from, next) => {
-  const user = JSON.parse(localStorage.getItem("user"));
-  const authToken = localStorage.getItem("authToken");
-
-  // Make user and authToken available in route.meta for components to consume via props
-  to.meta.user = user;
-  to.meta.authToken = authToken;
+  const user = JSON.parse(localStorage.getItem("user") || "null");
 
   if (to.meta.requiresAuth && !user) {
     next({ name: "login" });
@@ -132,4 +114,5 @@ router.beforeEach((to, from, next) => {
     next();
   }
 });
+
 export default router;

@@ -1,31 +1,21 @@
 <?php
 // app/controllers/BrandController.php
 
-namespace App\Controllers; // Use the same namespace as the base Controller
+namespace App\Controllers; 
 
-require_once __DIR__ . '/Controller.php'; // Require the base Controller
-require_once dirname(__FILE__) . '/../services/BrandService.php'; // Require the BrandService
+require_once __DIR__ . '/Controller.php'; 
+require_once dirname(__FILE__) . '/../services/BrandService.php'; 
 
-use App\Services\BrandService; // Use the BrandService from its namespace
+use App\Services\BrandService; 
 
 class BrandController extends Controller
 {
     private $brandService;
-
-    /**
-     * Constructor for BrandController.
-     * Initializes the BrandService.
-     */
     public function __construct()
     {
         parent::__construct(); // Call the parent constructor to set up headers
         $this->brandService = new BrandService(); // Instantiate the BrandService
     }
-
-    /**
-     * Handles retrieving all brands.
-     * Route: GET /api/brands
-     */
     public function index()
     {
         $brands = $this->brandService->getAllBrands();
@@ -37,7 +27,7 @@ class BrandController extends Controller
                     "id" => $brand->id,
                     "name" => $brand->name,
                     "manufacturer_id" => $brand->manufacturer_id,
-                    "manufacturer_name" => $brand->manufacturer_name // From join
+                    "manufacturer_name" => $brand->manufacturer_name 
                 ];
             }
             $this->jsonResponse($brands_arr, 200);
@@ -45,12 +35,6 @@ class BrandController extends Controller
             $this->jsonResponse(["message" => "No brands found."], 404);
         }
     }
-
-    /**
-     * Handles retrieving a single brand by ID.
-     * Route: GET /api/brands/{id}
-     * @param int $id The ID of the brand to retrieve.
-     */
     public function show(int $id)
     {
         $brand = $this->brandService->getBrandById($id);
@@ -67,10 +51,6 @@ class BrandController extends Controller
         }
     }
 
-    /**
-     * Handles creating a new brand.
-     * Route: POST /api/brands
-     */
     public function store()
     {
         $data = $this->getJsonInput();
@@ -99,11 +79,6 @@ class BrandController extends Controller
         }
     }
 
-    /**
-     * Handles updating an existing brand.
-     * Route: PUT /api/brands/{id}
-     * @param int $id The ID of the brand to update.
-     */
     public function update(int $id)
     {
         $data = $this->getJsonInput();
@@ -132,12 +107,6 @@ class BrandController extends Controller
             $this->errorResponse("Failed to update brand or brand not found.", 404);
         }
     }
-
-    /**
-     * Handles deleting a brand.
-     * Route: DELETE /api/brands/{id}
-     * @param int $id The ID of the brand to delete.
-     */
     public function destroy(int $id)
     {
         $success = $this->brandService->deleteBrand($id);

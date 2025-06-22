@@ -10,19 +10,10 @@ require_once dirname(__FILE__) . '/../models/User.php';
 require_once __DIR__ . '/Repository.php';
 
 class UserRepository extends Repository {
-    /**
-     * Constructor for UserRepository.
-     * Calls the parent constructor to establish the database connection.
-     */
     public function __construct() {
         parent::__construct();
     }
 
-    /**
-     * Finds a user by username.
-     * @param string $username
-     * @return array|false Returns associative array of user data if found, false otherwise.
-     */
     public function findByUsername($username) {
         // Trim whitespace from the username to prevent issues with leading/trailing spaces
         $username = trim($username);
@@ -37,12 +28,6 @@ class UserRepository extends Repository {
 
         return $result;
     }
-
-    /**
-     * Finds a user by email.
-     * @param string $email
-     * @return array|false Returns associative array of user data if found, false otherwise.
-     */
     public function findByEmail($email) {
         // Trim whitespace from the email to prevent issues with leading/trailing spaces
         $email = trim($email);
@@ -58,12 +43,6 @@ class UserRepository extends Repository {
         return $result;
     }
 
-
-    /**
-     * Finds a user by ID.
-     * @param int $id
-     * @return array|false Returns associative array of user data if found, false otherwise.
-     */
     public function getUserById($id) {
         $query = "SELECT id, username, email, password_hash, role FROM users WHERE id = ? LIMIT 0,1";
         $stmt = $this->connection->prepare($query);
@@ -72,11 +51,6 @@ class UserRepository extends Repository {
         return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
-    /**
-     * Creates a new user in the database.
-     * @param array $userData Associative array of user data (username, email, password_hash, role).
-     * @return int|false Returns the ID of the newly created user on success, false on failure.
-     */
     public function createUser(array $userData) {
         $query = "INSERT INTO users (username, email, password_hash, role) VALUES (:username, :email, :password_hash, :role)";
         $stmt = $this->connection->prepare($query);
@@ -99,12 +73,6 @@ class UserRepository extends Repository {
         return false;
     }
 
-    /**
-     * Updates an existing user in the database.
-     * @param int $id The ID of the user to update.
-     * @param array $data Associative array of user data to update.
-     * @return bool True on success, false on failure.
-     */
     public function update($id, array $data) {
         $setParts = [];
         $params = [':id' => $id];
@@ -143,12 +111,6 @@ class UserRepository extends Repository {
         }
         return false;
     }
-
-    /**
-     * Deletes a user from the database.
-     * @param int $id The ID of the user to delete.
-     * @return bool True on success, false on failure.
-     */
     public function delete($id) {
         $query = "DELETE FROM users WHERE id = ?";
         $stmt = $this->connection->prepare($query);

@@ -33,10 +33,6 @@ class Controller
         Response::error($message, $statusCode);
     }
 
-    /**
-     * Parses the JSON body from a POST/PUT request.
-     * @return array|null Returns decoded JSON data as an associative array, or null if empty/invalid.
-     */
     protected function getJsonInput() {
         $input = file_get_contents("php://input");
         error_log("Controller: Raw JSON input received: " . ($input ?: "EMPTY")); // DEBUG: Log raw input

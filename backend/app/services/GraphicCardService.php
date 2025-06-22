@@ -16,20 +16,12 @@ class GraphicCardService
     private $graphicCardRepository;
     private $imageUploader; // NEW: Declare ImageUploader instance
 
-    /**
-     * Constructor for GraphicCardService.
-     * Initializes the GraphicCardRepository and ImageUploader.
-     */
     public function __construct()
     {
         $this->graphicCardRepository = new GraphicCardRepository();
         $this->imageUploader = new ImageUploader(); // NEW: Initialize ImageUploader
     }
 
-    /**
-     * Retrieves all graphic cards.
-     * @return array An array of GraphicCard model instances.
-     */
     public function getAllGraphicCards()
     {
         $graphicCardsData = $this->graphicCardRepository->getAll();
@@ -40,11 +32,6 @@ class GraphicCardService
         return $graphicCards;
     }
 
-    /**
-     * Retrieves a single graphic card by ID.
-     * @param int $id
-     * @return GraphicCard|false Returns a GraphicCard model instance if found, false otherwise.
-     */
     public function getGraphicCardById(int $id)
     {
         $graphicCardData = $this->graphicCardRepository->getById($id);
@@ -54,13 +41,6 @@ class GraphicCardService
         return false;
     }
 
-    /**
-     * Creates a new graphic card, handling image upload if a file is provided.
-     *
-     * @param array $data Associative array of graphic card data (typically from $_POST).
-     * @param array $fileData Associative array of file data (typically from $_FILES['image']).
-     * @return GraphicCard|false Returns the created GraphicCard object on success, false on failure.
-     */
     public function createGraphicCard(array $data, array $fileData = [])
     {
         // Add image_url to $data if an image is uploaded
@@ -96,14 +76,6 @@ class GraphicCardService
         return false;
     }
 
-    /**
-     * Updates an existing graphic card, handling image upload/replacement/deletion.
-     *
-     * @param int $id The ID of the graphic card to update.
-     * @param array $data Associative array of graphic card data (typically from $_POST).
-     * @param array $fileData Associative array of file data (typically from $_FILES['image']).
-     * @return bool True on success, false on failure.
-     */
     public function updateGraphicCard(int $id, array $data, array $fileData = [])
     {
         // Fetch current graphic card to get its existing image_url

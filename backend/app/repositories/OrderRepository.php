@@ -5,104 +5,110 @@ namespace App\Repositories;
 
 use \PDO;
 use \PDOException;
+use App\Models\Order; // Import the Order model
+use App\Models\OrderItem; // Import the OrderItem model
+use App\Models\User; // Import the User model
 
 require_once dirname(__FILE__) . '/../models/Order.php';
-require_once dirname(__FILE__) . '/../models/User.php'; // Required for join info
-require_once __DIR__ . '/Repository.php'; // Require the base Repository class
+require_once dirname(__FILE__) . '/../models/OrderItem.php';
+require_once dirname(__FILE__) . '/../models/User.php'; // Require User model for getUserById
+require_once __DIR__ . '/Repository.php';
 
 class OrderRepository extends Repository {
-    /**
-     * Constructor for OrderRepository.
-     * Calls the parent constructor to establish the database connection.
-     */
     public function __construct() {
         parent::__construct();
     }
 
-    /**
-     * Retrieves all orders from the database, optionally filtered by user ID.
-     * Includes username from the users table.
-     * @param int|null $userId Optional user ID to filter orders.
-     * @return array An array of associative arrays, where each inner array represents an order.
-     * Returns an empty array if no orders are found.
-     */
+    public function beginTransaction(): bool {
+        return $this->connection->beginTransaction();
+    }
+
+    public function commit(): bool {
+        return $this->connection->commit();
+    }
+
+    public function rollBack(): bool {
+        return $this->connection->rollBack();
+    }
     public function getAll(?int $userId = null) {
         $query = "SELECT o.id, o.user_id, o.total_amount, o.status, o.order_date, o.updated_at, u.username
                   FROM orders o
-                  LEFT JOIN users u ON o.user_id = u.id";
+                  JOIN users u ON o.user_id = u.id";
+
+        $conditions = [];
         $params = [];
 
         if ($userId !== null) {
-            $query .= " WHERE o.user_id = ?";
-            $params[] = $userId;
+            $conditions[] = "o.user_id = :user_id";
+            $params[':user_id'] = $userId;
         }
 
-        $query .= " ORDER BY o.order_date DESC"; // Order by most recent first
+        if (!empty($conditions)) {
+            $query .= " WHERE " . implode(' AND ', $conditions);
+        }
+
+        $query .= " ORDER BY o.order_date DESC";
 
         $stmt = $this->connection->prepare($query);
-        $stmt->execute($params);
+        foreach ($params as $key => $val) {
+            $stmt->bindValue($key, $val, PDO::PARAM_INT);
+        }
+        $stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /**
-     * Retrieves a single order by ID from the database, including username.
-     *
-     * @param int $id The ID of the order to retrieve.
-     * @return array|false Returns an associative array of order data if found, false otherwise.
-     */
     public function getById($id) {
         $query = "SELECT o.id, o.user_id, o.total_amount, o.status, o.order_date, o.updated_at, u.username
                   FROM orders o
-                  LEFT JOIN users u ON o.user_id = u.id
+                  JOIN users u ON o.user_id = u.id
                   WHERE o.id = ? LIMIT 0,1";
         $stmt = $this->connection->prepare($query);
         $stmt->bindParam(1, $id, PDO::PARAM_INT);
         $stmt->execute();
         return $stmt->fetch(PDO::FETCH_ASSOC);
     }
+
+    public function getOrderItemsByOrderId(int $orderId) {
+        $query = "SELECT oi.id, oi.order_id, oi.graphic_card_id, oi.quantity, oi.price_at_purchase, gc.name AS graphic_card_name
+                  FROM order_items oi
+                  JOIN graphic_cards gc ON oi.graphic_card_id = gc.id
+                  WHERE oi.order_id = ?";
+        $stmt = $this->connection->prepare($query);
+        $stmt->bindParam(1, $orderId, PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function create(array $data) {
-        error_log("OrderRepository: create method called with data: " . print_r($data, true)); // DEBUG
+        // Ensure status is set, default to 'pending'
+        $status = $data['status'] ?? 'pending';
 
-        // Ensure these keys exist and are of appropriate types
-        if (!isset($data['user_id']) || !isset($data['total_amount']) || !isset($data['status'])) {
-            error_log("OrderRepository: Missing required data for creating an order.");
-            return false;
-        }
-
-        $query = "INSERT INTO orders (user_id, total_amount, status) VALUES (:user_id, :total_amount, :status)";
+        $query = "INSERT INTO orders (user_id, total_amount, status)
+                  VALUES (:user_id, :total_amount, :status)";
         $stmt = $this->connection->prepare($query);
 
-        // Sanitize and bind values
+        // Bind parameters
         $userId = $data['user_id'];
         $totalAmount = $data['total_amount'];
-        $status = htmlspecialchars(strip_tags($data['status']));
 
         $stmt->bindParam(":user_id", $userId, PDO::PARAM_INT);
-        $stmt->bindParam(":total_amount", $totalAmount); // PDO will handle DECIMAL/FLOAT
+        $stmt->bindParam(":total_amount", $totalAmount); // PDO handles FLOAT/DECIMAL
         $stmt->bindParam(":status", $status, PDO::PARAM_STR);
 
         try {
             $success = $stmt->execute();
             if ($success) {
-                $lastInsertId = (int)$this->connection->lastInsertId();
-                error_log("OrderRepository: Order record created successfully with ID: " . $lastInsertId); // DEBUG
-                return $lastInsertId;
+                return (int)$this->connection->lastInsertId();
             } else {
-                error_log("OrderRepository: Failed to execute order creation statement. ErrorInfo: " . print_r($stmt->errorInfo(), true)); // DEBUG
+                error_log("OrderRepository: Failed to execute order creation statement. ErrorInfo: " . print_r($stmt->errorInfo(), true));
                 return false;
             }
         } catch (PDOException $e) {
-            error_log("OrderRepository: PDOException during order creation: " . $e->getMessage()); // DEBUG
+            error_log("OrderRepository: PDOException during order creation: " . $e->getMessage());
             return false;
         }
     }
 
-    /**
-     * Updates an existing order.
-     * @param int $id The ID of the order to update.
-     * @param array $data Associative array of order properties to update.
-     * @return bool True on success, false on failure.
-     */
     public function update($id, array $data) {
         $setParts = [];
         $params = [':id' => $id];
@@ -115,10 +121,11 @@ class OrderRepository extends Repository {
             $setParts[] = 'total_amount = :total_amount';
             $params[':total_amount'] = $data['total_amount'];
         }
-        if (isset($data['status'])) {
+        if (isset($data['status'])) { // Allow updating status
             $setParts[] = 'status = :status';
-            $params[':status'] = htmlspecialchars(strip_tags($data['status']));
+            $params[':status'] = $data['status'];
         }
+        // updated_at is automatically updated by the database TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 
         if (empty($setParts)) {
             error_log("OrderRepository: No valid fields to update for order ID: " . $id);
@@ -130,7 +137,17 @@ class OrderRepository extends Repository {
 
         try {
             foreach ($params as $key => $value) {
-                $stmt->bindValue($key, $value, is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR);
+                // Determine PDO parameter type
+                if ($key === ':user_id') {
+                    $type = PDO::PARAM_INT;
+                } elseif ($key === ':total_amount') {
+                    $type = PDO::PARAM_STR; // PDO handles FLOAT/DECIMAL types well with STR
+                } elseif ($key === ':status') {
+                    $type = PDO::PARAM_STR;
+                } else {
+                    $type = PDO::PARAM_STR;
+                }
+                $stmt->bindValue($key, $value, $type);
             }
             $success = $stmt->execute();
             if ($success && $stmt->rowCount() > 0) {
@@ -146,13 +163,7 @@ class OrderRepository extends Repository {
         }
     }
 
-    /**
-     * Deletes an order from the database.
-     * @param int $id The ID of the order to delete.
-     * @return bool True on success, false on failure.
-     */
     public function delete($id) {
-        // Deleting an order will typically cascade delete order_items due to foreign key ON DELETE CASCADE.
         $query = "DELETE FROM orders WHERE id = ?";
         $stmt = $this->connection->prepare($query);
         $stmt->bindParam(1, $id, PDO::PARAM_INT);
@@ -170,5 +181,20 @@ class OrderRepository extends Repository {
             error_log("OrderRepository: PDOException during order deletion: " . $e->getMessage());
             return false;
         }
+    }
+
+    public function getUserById(int $userId) {
+        $query = "SELECT id, username, email FROM users WHERE id = ? LIMIT 0,1";
+        $stmt = $this->connection->prepare($query);
+        $stmt->bindParam(1, $userId, PDO::PARAM_INT);
+        $stmt->execute();
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($user) {
+            error_log("OrderRepository: User found for ID {$userId}: " . $user['username']);
+        } else {
+            error_log("OrderRepository: User not found for ID: {$userId}");
+        }
+        return $user;
     }
 }

@@ -16,18 +16,10 @@ use App\Utils\JWTUtility; // NEW: Use JWTUtility class
 class UserService {
     private $userRepository;
 
-    /**
-     * Constructor for UserService.
-     * Initializes the UserRepository.
-     */
     public function __construct() {
         $this->userRepository = new UserRepository();
     }
 
-    /**
-     * Retrieves all users.
-     * @return array An array of User model instances.
-     */
     public function getAllUsers() {
         $usersData = $this->userRepository->getAll();
         $users = [];
@@ -39,14 +31,6 @@ class UserService {
         return $users;
     }
 
-    /**
-     * Registers a new user.
-     * @param string $username
-     * @param string $email
-     * @param string $password
-     * @param string $role
-     * @return User|false Returns a User model instance on successful registration, false otherwise.
-     */
     public function registerUser(string $username, string $email, string $password, string $role = 'customer') {
         // Basic validation
         if (empty($username) || empty($email) || empty($password)) {
@@ -119,12 +103,6 @@ class UserService {
         return false;
     }
 
-    /**
-     * Authenticates a user and generates a token.
-     * @param string $identifier User's username or email.
-     * @param string $password User's plain text password.
-     * @return array|false Returns an array with 'user' (User model) and 'token' on success, false on failure.
-     */
     public function loginUser(string $identifier, string $password) {
         // Try to find by username first, then by email if not found
         $userData = $this->userRepository->findByUsername($identifier);
@@ -164,11 +142,6 @@ class UserService {
         ];
     }
 
-    /**
-     * Retrieves user profile by ID.
-     * @param int $userId
-     * @return User|false Returns User model instance if found, false otherwise.
-     */
     public function getUserProfile(int $userId) {
         $userData = $this->userRepository->getUserById($userId);
         if ($userData) {
@@ -180,13 +153,6 @@ class UserService {
         return false;
     }
 
-    /**
-     * Updates an existing user's details.
-     * @param int $id The ID of the user to update.
-     * @param array $data Associative array of user data to update.
-     * Allowed keys: 'username', 'email', 'password', 'role'.
-     * @return User|false Returns the updated User model instance on success, false on failure.
-     */
     public function updateUser(int $id, array $data) {
         $updateData = [];
 

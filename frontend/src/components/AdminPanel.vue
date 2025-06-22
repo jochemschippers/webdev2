@@ -28,7 +28,7 @@
 
 <script setup>
 import { defineEmits } from "vue";
-import AdminCard from "./AdminCard.vue"; // Import the new AdminCard component
+import AdminCard from "../cards/AdminCard.vue"; // Import the new AdminCard component
 
 const emit = defineEmits(["navigate"]);
 </script>

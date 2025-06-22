@@ -73,12 +73,6 @@ class BrandRepository extends Repository {
         return false;
     }
 
-    /**
-     * Updates an existing brand.
-     * @param int $id The ID of the brand to update.
-     * @param array $data Associative array with 'name' and 'manufacturer_id'.
-     * @return bool True on success, false on failure.
-     */
     public function update($id, array $data) {
         $query = "UPDATE brands SET name = :name, manufacturer_id = :manufacturer_id WHERE id = :id";
         $stmt = $this->connection->prepare($query);
@@ -95,12 +89,6 @@ class BrandRepository extends Repository {
         }
         return false;
     }
-
-    /**
-     * Deletes a brand.
-     * @param int $id The ID of the brand to delete.
-     * @return bool True on success, false on failure.
-     */
     public function delete($id) {
         $query = "DELETE FROM brands WHERE id = ?";
         $stmt = $this->connection->prepare($query);

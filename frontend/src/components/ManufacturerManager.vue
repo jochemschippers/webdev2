@@ -78,7 +78,7 @@
 import { ref, onMounted, watch, defineProps } from "vue";
 import { apiCall } from "@/utils/api";
 import { LoadingSpinner, Message } from "@/utils/components";
-import ManufacturerForm from "./ManufacturerForm.vue";
+import ManufacturerForm from "@/forms/ManufacturerForm.vue";
 
 const props = defineProps({
   authToken: String,

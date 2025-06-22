@@ -104,7 +104,7 @@
 import { ref, onMounted, watch, defineProps } from "vue";
 import { apiCall } from "@/utils/api";
 import { LoadingSpinner, Message } from "@/utils/components";
-import UserForm from "./UserForm.vue"; // This component will be created next
+import UserForm from "../forms/UserForm.vue"; // This component will be created next
 
 const props = defineProps({
   authToken: String,

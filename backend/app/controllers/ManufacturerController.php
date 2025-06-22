@@ -12,20 +12,11 @@ class ManufacturerController extends Controller
 {
     private $manufacturerService;
 
-    /**
-     * Constructor for ManufacturerController.
-     * Initializes the ManufacturerService.
-     */
     public function __construct()
     {
         parent::__construct(); // Call the parent constructor to set up headers
         $this->manufacturerService = new ManufacturerService(); // Instantiate the ManufacturerService
     }
-
-    /**
-     * Handles retrieving all manufacturers.
-     * Route: GET /api/manufacturers
-     */
     public function index()
     {
         $manufacturers = $this->manufacturerService->getAllManufacturers();
@@ -43,12 +34,6 @@ class ManufacturerController extends Controller
             $this->jsonResponse(["message" => "No manufacturers found."], 404);
         }
     }
-
-    /**
-     * Handles retrieving a single manufacturer by ID.
-     * Route: GET /api/manufacturers/{id}
-     * @param int $id The ID of the manufacturer to retrieve.
-     */
     public function show(int $id)
     {
         $manufacturer = $this->manufacturerService->getManufacturerById($id);
@@ -63,10 +48,6 @@ class ManufacturerController extends Controller
         }
     }
 
-    /**
-     * Handles creating a new manufacturer.
-     * Route: POST /api/manufacturers
-     */
     public function store()
     {
         $data = $this->getJsonInput();
@@ -89,14 +70,7 @@ class ManufacturerController extends Controller
         } else {
             $this->errorResponse("Failed to create manufacturer. Name might already exist.", 409);
         }
-    }
-
-    /**
-     * Handles updating an existing manufacturer.
-     * Route: PUT /api/manufacturers/{id}
-     * @param int $id The ID of the manufacturer to update.
-     */
-    public function update(int $id)
+    }    public function update(int $id)
     {
         $data = $this->getJsonInput();
 
@@ -121,12 +95,6 @@ class ManufacturerController extends Controller
             $this->errorResponse("Failed to update manufacturer or manufacturer not found.", 404);
         }
     }
-
-    /**
-     * Handles deleting a manufacturer.
-     * Route: DELETE /api/manufacturers/{id}
-     * @param int $id The ID of the manufacturer to delete.
-     */
     public function destroy(int $id)
     {
         $success = $this->manufacturerService->deleteManufacturer($id);

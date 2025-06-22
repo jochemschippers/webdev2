@@ -8,7 +8,7 @@
           class="block text-gray-700 text-sm font-bold mb-2"
           for="username"
         >
-          Username/Email
+          Username
         </label>
         <input
           type="text"

@@ -79,11 +79,6 @@ class UserController extends Controller
         }
     }
 
-    /**
-     * Gets authenticated user's profile.
-     * This method now expects the authenticated user ID from the middleware.
-     * @param int $userId The ID of the authenticated user.
-     */
     public function profile(int $userId) {
         $userProfile = $this->userService->getUserProfile($userId);
 

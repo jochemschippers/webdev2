@@ -187,7 +187,7 @@ import { ref, onMounted, watch, inject } from "vue";
 import { useRoute } from "vue-router";
 import { apiCall } from "@/utils/api";
 import { LoadingSpinner, Message } from "@/utils/components";
-import AddToCartNotification from "./AddToCartNotification.vue"; // NEW: Import AddToCartNotification
+import AddToCartNotification from "@/components/AddToCartNotification.vue"; // NEW: Import AddToCartNotification
 
 const route = useRoute();
 const graphicCard = ref(null);
