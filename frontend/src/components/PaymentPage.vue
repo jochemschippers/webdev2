@@ -230,7 +230,7 @@
 </template>
 
 <script setup>
-import { ref, defineProps, defineEmits, watch, computed } from "vue";
+import { ref, defineProps, defineEmits, watch, computed, onMounted } from "vue"; // ADDED onMounted
 import { apiCall } from "@/utils/api";
 import { Message, LoadingSpinner } from "@/utils/components";
 import { useRouter, useRoute } from "vue-router";
@@ -364,7 +364,7 @@ const finalizeOrder = async () => {
     await apiCall(
       `orders/${order.value.id}`,
       "PUT",
-      { status: "processing" }, // Change status to 'processing' or 'completed'
+      { status: "processing" }, // Change status to 'processing' or 'paid'
       props.authToken
     );
     console.log("Order status updated successfully.");
@@ -391,7 +391,7 @@ const finalizeOrder = async () => {
       loadingOrder.value,
       "processingPayment:",
       processingPayment.value
-    ); // CORRECTED
+    );
   }
 };
 
@@ -406,6 +406,14 @@ watch(
   },
   { immediate: true }
 );
+
+// Initial fetch if component is mounted directly with an orderId
+onMounted(() => {
+  // If the component is mounted and orderId is already present (e.g., direct URL access)
+  if (route.params.orderId) {
+    fetchOrderDetails(route.params.orderId);
+  }
+});
 </script>
 
 <style scoped>

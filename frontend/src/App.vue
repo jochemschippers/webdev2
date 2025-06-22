@@ -1,8 +1,8 @@
 <template>
-  <div id="app" class="min-h-screen bg-gray-100 font-inter">
+  <div id="app" class="min-h-screen bg-gray-100 font-inter flex flex-col">
     <AppNavbar :user="user" @logout="handleLogout" />
 
-    <main class="p-4">
+    <main class="p-4 flex-grow">
       <router-view
         :user="user"
         :auth-token="authToken"
@@ -13,8 +13,11 @@
         @update-cart-quantity="handleUpdateCartQuantity"
         :cart="cart"
         @order-completed="handlePlaceOrderSuccess"
+        @navigate="handleNavigation"
       ></router-view>
     </main>
+
+    <AppFooter />
   </div>
 </template>
 
@@ -22,6 +25,7 @@
 import { ref, onMounted, provide } from "vue";
 import { useRouter } from "vue-router";
 import AppNavbar from "./components/AppNavbar.vue";
+import AppFooter from "./components/AppFooter.vue"; // NEW: Import AppFooter
 
 const router = useRouter();
 
@@ -38,12 +42,14 @@ provide("cart", cart); // Provide cart for CartSummary if it's not a direct chil
 const handleAddToCart = (product, quantity = 1) => {
   const existingItem = cart.value.find((item) => item.id === product.id);
   if (existingItem) {
+    // Corrected: Assign the new array back to cart.value
     cart.value = cart.value.map((item) =>
       item.id === product.id
         ? { ...item, quantity: item.quantity + quantity }
         : item
     );
   } else {
+    // Corrected: Assign the new array back to cart.value
     // Also include stock information in cart item to validate quantity changes
     cart.value = [
       ...cart.value,
@@ -52,7 +58,7 @@ const handleAddToCart = (product, quantity = 1) => {
   }
 };
 
-// NEW: Handle quantity update from CartSummary
+// Handle quantity update from CartSummary
 const handleUpdateCartQuantity = (productId, newQuantity) => {
   cart.value = cart.value.map((item) =>
     item.id === productId ? { ...item, quantity: newQuantity } : item
@@ -61,7 +67,7 @@ const handleUpdateCartQuantity = (productId, newQuantity) => {
 
 // Provide the handleAddToCart and handleUpdateCartQuantity functions for injection in other components
 provide("handleAppAddToCart", handleAddToCart);
-provide("handleAppUpdateCartQuantity", handleUpdateCartQuantity); // NEW: Provide the update function
+provide("handleAppUpdateCartQuantity", handleUpdateCartQuantity);
 
 onMounted(() => {
   const storedUser = localStorage.getItem("user");
@@ -97,6 +103,11 @@ const handleRemoveFromCart = (productId) => {
 const handlePlaceOrderSuccess = () => {
   cart.value = []; // Clear cart only after payment is confirmed/order is finalized
   // The redirection to 'orders' page is now handled within PaymentPage.vue
+};
+
+// NEW: Handler for custom navigation event from child components (like AdminPanel)
+const handleNavigation = (routeName) => {
+  router.push({ name: routeName });
 };
 </script>
 

@@ -18,26 +18,19 @@
         title="Manage Orders"
         @click="emit('navigate', 'admin-orders')"
       />
+      <AdminCard
+        title="Manage Users"
+        @click="emit('navigate', 'admin-users')"
+      />
     </div>
   </div>
 </template>
 
 <script setup>
 import { defineEmits } from "vue";
+import AdminCard from "./AdminCard.vue"; // Import the new AdminCard component
 
 const emit = defineEmits(["navigate"]);
-
-// Inner AdminCard component
-const AdminCard = {
-  props: ["title"],
-  template: `
-    <div
-      class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-8 px-4 rounded-lg shadow-lg cursor-pointer flex items-center justify-center text-xl transition duration-300 ease-in-out transform hover:scale-105"
-    >
-      {{ title }}
-    </div>
-  `,
-};
 </script>
 
 <style scoped>

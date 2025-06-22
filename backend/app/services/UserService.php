@@ -25,6 +25,21 @@ class UserService {
     }
 
     /**
+     * Retrieves all users.
+     * @return array An array of User model instances.
+     */
+    public function getAllUsers() {
+        $usersData = $this->userRepository->getAll();
+        $users = [];
+        foreach ($usersData as $data) {
+            // Do not expose password_hash when fetching all users for display
+            unset($data['password_hash']);
+            $users[] = new User($data);
+        }
+        return $users;
+    }
+
+    /**
      * Registers a new user.
      * @param string $username
      * @param string $email
@@ -157,9 +172,76 @@ class UserService {
     public function getUserProfile(int $userId) {
         $userData = $this->userRepository->getUserById($userId);
         if ($userData) {
+            // Do not expose password_hash when retrieving profile
+            unset($userData['password_hash']);
             return new User($userData);
         }
         error_log("UserService: User profile not found for ID: " . $userId);
         return false;
+    }
+
+    /**
+     * Updates an existing user's details.
+     * @param int $id The ID of the user to update.
+     * @param array $data Associative array of user data to update.
+     * Allowed keys: 'username', 'email', 'password', 'role'.
+     * @return User|false Returns the updated User model instance on success, false on failure.
+     */
+    public function updateUser(int $id, array $data) {
+        $updateData = [];
+
+        // Validate and sanitize inputs
+        if (isset($data['username']) && !empty($data['username'])) {
+            $updateData['username'] = $data['username'];
+        }
+        if (isset($data['email']) && !empty($data['email'])) {
+            $updateData['email'] = $data['email'];
+        }
+        if (isset($data['role']) && in_array($data['role'], ['customer', 'admin'])) {
+            $updateData['role'] = $data['role'];
+        }
+
+        // Handle password change: only if 'password' key is provided and not empty
+        if (isset($data['password']) && !empty($data['password'])) {
+            // Apply password strength requirements to new password
+            $newPassword = $data['password'];
+            if (strlen($newPassword) < 8 ||
+                !preg_match('/[A-Z]/', $newPassword) ||
+                !preg_match('/[a-z]/', $newPassword) ||
+                !preg_match('/[0-9]/', $newPassword) ||
+                !preg_match('/[^A-Za-z0-9]/', $newPassword)) {
+                error_log("UserService: Update failed - New password does not meet complexity requirements.");
+                return false; // Password not strong enough
+            }
+            $updateData['password_hash'] = password_hash($newPassword, PASSWORD_DEFAULT);
+        }
+
+        if (empty($updateData)) {
+            error_log("UserService: No valid data provided for user update (ID: " . $id . ").");
+            return false; // No valid fields to update
+        }
+
+        $success = $this->userRepository->update($id, $updateData);
+
+        if ($success) {
+            return $this->getUserProfile($id); // Fetch and return updated user data (without password hash)
+        }
+        error_log("UserService: Failed to update user in repository (ID: " . $id . ").");
+        return false;
+    }
+
+    /**
+     * Deletes a user.
+     * @param int $id The ID of the user to delete.
+     * @return bool True on success, false on failure.
+     */
+    public function deleteUser(int $id): bool {
+        // Prevent deleting the very first admin user (ID 1), or implement more robust logic.
+        // For demonstration, a simple check.
+        if ($id === 1) { // Assuming ID 1 is a critical admin account
+            error_log("UserService: Attempted to delete protected user ID: " . $id);
+            return false; // Cannot delete this user
+        }
+        return $this->userRepository->delete($id);
     }
 }

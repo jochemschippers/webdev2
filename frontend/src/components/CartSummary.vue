@@ -35,7 +35,7 @@
           <div class="flex-1">
             <p class="font-semibold text-gray-700">{{ item.name }}</p>
             <p class="text-sm text-gray-500">
-              ${{ parseFloat(item.price).toFixed(2) }}
+              \${{ parseFloat(item.price).toFixed(2) }}
             </p>
           </div>
         </div>
@@ -69,7 +69,7 @@
           </div>
 
           <span class="font-semibold text-gray-800 ml-2 mr-2 w-16 text-right"
-            >${{ (parseFloat(item.price) * item.quantity).toFixed(2) }}</span
+            >\${{ (parseFloat(item.price) * item.quantity).toFixed(2) }}</span
           >
           <button
             @click="emit('remove-from-cart', item.id)"
@@ -97,7 +97,7 @@
       <div class="pt-4 border-t-2 border-gray-200">
         <div class="flex justify-between font-bold text-lg text-gray-800">
           <span>Total:</span>
-          <span>${{ cartTotal.toFixed(2) }}</span>
+          <span>\${{ cartTotal.toFixed(2) }}</span>
         </div>
       </div>
 
@@ -211,7 +211,7 @@ const placeOrder = async () => {
       {
         user_id: props.user.id,
         total_amount: cartTotal.value,
-        status: "pending",
+        status: "pending", // Always set to pending initially
         items: orderItems,
       },
       props.authToken
@@ -223,9 +223,12 @@ const placeOrder = async () => {
 
       const orderId = response.order.id;
 
+      // Use a slight delay before redirecting to allow message to be seen
       setTimeout(() => {
         router.push({ name: "checkout", params: { orderId: orderId } });
-      }, 1000);
+      }, 1000); // 1-second delay
+
+      emit("place-order"); // Emit to parent to clear the cart
     } else {
       messageType.value = "error";
       message.value =
